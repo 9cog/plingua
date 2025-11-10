@@ -1,0 +1,621 @@
+/*
+ * P-Lingua Data Model Formal Specification (Z++)
+ * 
+ * This specification formally defines the data structures used in P-Lingua
+ * for representing membrane computing systems (P-systems).
+ * 
+ * The specification follows the implementation in include/serialization.hpp
+ * and provides a rigorous mathematical foundation for the P-Lingua data model.
+ */
+
+/* ============================================================================
+ * SECTION 1: BASIC TYPE DEFINITIONS
+ * ============================================================================ */
+
+/*
+ * ValueType: Enumeration of supported primitive types
+ * 
+ * P-Lingua supports various primitive types for values stored in features,
+ * global variables, and computational expressions.
+ */
+ValueType ::= CHAR | UCHAR | SHORT | USHORT | INT | UINT | LONG | DOUBLE | STRING
+
+/*
+ * Value: Generic value container
+ * 
+ * A Value represents a typed piece of data that can be one of several
+ * primitive types. This is used throughout P-Lingua for feature values,
+ * global variables, and expression results.
+ * 
+ * Invariants:
+ * - The value's type determines which field of the union is valid
+ * - String values must be properly null-terminated
+ */
+schema Value
+  type_: ValueType
+  charValue: ℤ       -- For CHAR type (-128..127)
+  ucharValue: ℕ      -- For UCHAR type (0..255)
+  shortValue: ℤ      -- For SHORT type
+  ushortValue: ℕ     -- For USHORT type
+  intValue: ℤ        -- For INT type
+  uintValue: ℕ       -- For UINT type
+  longValue: ℤ       -- For LONG type
+  doubleValue: ℝ     -- For DOUBLE type
+  stringValue: seq ℤ -- For STRING type (null-terminated)
+where
+  -- Type-specific constraints
+  type_ = CHAR ⇒ charValue ∈ -128..127
+  type_ = UCHAR ⇒ ucharValue ∈ 0..255
+  type_ = STRING ⇒ #stringValue > 0 ∧ stringValue(#stringValue) = 0
+end
+
+/*
+ * Multiplicity: Object count in multisets
+ * 
+ * Represents the number of occurrences of an object in a multiset.
+ * Must be non-negative.
+ */
+schema Multiplicity
+  multiplicity: ℕ
+where
+  multiplicity ≥ 0
+end
+
+/*
+ * String: Base class for typed strings
+ * 
+ * A string is a sequence of characters used for identifiers.
+ * Different subclasses provide semantic typing for different uses.
+ */
+schema String
+  str_: seq ℤ
+where
+  #str_ > 0  -- Non-empty
+end
+
+/*
+ * ObjectString: String representing an object identifier
+ * 
+ * Objects are the atomic entities that populate multisets.
+ * Examples: "a", "b{1}", "protein_X"
+ */
+schema ObjectString
+  String
+where
+  -- Inherits all constraints from String
+end
+
+/*
+ * LabelString: String representing a membrane label component
+ * 
+ * Labels identify membrane types and can be hierarchical.
+ * Examples: "skin", "nucleus", "1"
+ */
+schema LabelString
+  String
+where
+  -- Inherits all constraints from String
+end
+
+/*
+ * FeatureString: String representing a feature name
+ * 
+ * Features are key-value pairs attached to rules and systems.
+ * Examples: "priority", "probability", "pattern"
+ */
+schema FeatureString
+  String
+where
+  -- Inherits all constraints from String
+end
+
+/* ============================================================================
+ * SECTION 2: COMPOSITE DATA STRUCTURES
+ * ============================================================================ */
+
+/*
+ * Label: Hierarchical membrane identifier
+ * 
+ * A label is a sequence of label strings that uniquely identify a membrane
+ * type within a P-system. Labels can be compared and used to index membranes.
+ * 
+ * Examples: ["1"], ["skin", "2"], ["nucleus", "inner", "1"]
+ */
+schema Label
+  components: seq LabelString
+where
+  #components > 0  -- At least one component
+end
+
+/*
+ * Multiset: Collection of objects with multiplicities
+ * 
+ * A multiset maps object identifiers to their multiplicities.
+ * This is the fundamental data structure for representing the contents
+ * of membranes and the left/right-hand sides of rules.
+ * 
+ * Invariants:
+ * - All multiplicities are positive (objects with zero multiplicity are removed)
+ * - Objects are unique (no duplicate keys)
+ */
+schema Multiset
+  objects: ObjectString ⇸ Multiplicity
+where
+  ∀ obj: dom objects • objects(obj).multiplicity > 0
+end
+
+/*
+ * Features: Named properties with values
+ * 
+ * Features provide extensibility by allowing arbitrary key-value pairs
+ * to be attached to rules, systems, and other entities.
+ * 
+ * Common features:
+ * - priority: ℤ (rule execution priority)
+ * - probability: ℝ (stochastic rule probability)
+ * - pattern: STRING (semantic pattern name)
+ */
+schema Features
+  attributes: FeatureString ⇸ Value
+where
+  -- All features must have valid values
+  ∀ key: dom attributes • 
+    attributes(key).type_ ∈ ValueType
+end
+
+/* ============================================================================
+ * SECTION 3: MEMBRANE STRUCTURES
+ * ============================================================================ */
+
+/*
+ * Charge: Electrical state of a membrane
+ * 
+ * Membranes can have negative (-1), neutral (0), or positive (+1) charge.
+ * Charge affects rule applicability and membrane behavior.
+ */
+Charge ::= NEGATIVE | NEUTRAL | POSITIVE
+
+schema ChargeValue
+  charge: ℤ
+where
+  charge ∈ {-1, 0, 1}
+end
+
+/*
+ * LeafMembrane: Base membrane structure
+ * 
+ * The minimal membrane contains a charge and a label.
+ * This serves as the base for more complex membrane types.
+ */
+schema LeafMembrane
+  charge: ChargeValue
+  label: Label
+where
+  -- No additional constraints beyond field types
+end
+
+/*
+ * Membrane: Hierarchical membrane structure
+ * 
+ * A membrane can contain other membranes, forming a tree structure.
+ * This represents the static structure defined in P-Lingua source code.
+ * 
+ * Invariants:
+ * - No cycles in the membrane hierarchy
+ * - Each child membrane has a unique label within its parent
+ */
+schema Membrane
+  LeafMembrane
+  children: seq Membrane
+where
+  -- Unique labels among children
+  ∀ i, j: dom children • i ≠ j ⇒ children(i).label ≠ children(j).label
+end
+
+/*
+ * IMembrane: Inner membrane (with multiset)
+ * 
+ * An inner membrane extends a leaf membrane with a multiset of objects.
+ * This is used in rules to specify the contents of nested membranes.
+ */
+schema IMembrane
+  LeafMembrane
+  multiset: Multiset
+where
+  -- Multiset must be well-formed
+  ∀ obj: dom multiset.objects • 
+    multiset.objects(obj).multiplicity > 0
+end
+
+/*
+ * OMembrane: Outer membrane (for rules)
+ * 
+ * An outer membrane is used in rules to represent a membrane with its
+ * contents and potentially inner membranes. It combines IMembrane with
+ * a sequence of inner membranes.
+ * 
+ * Invariants:
+ * - Inner membranes have unique labels
+ * - All inner membranes are well-formed
+ */
+schema OMembrane
+  IMembrane
+  innerMembranes: seq IMembrane
+where
+  -- Unique labels among inner membranes
+  ∀ i, j: dom innerMembranes • 
+    i ≠ j ⇒ innerMembranes(i).label ≠ innerMembranes(j).label
+end
+
+/* ============================================================================
+ * SECTION 4: EVOLUTION RULES
+ * ============================================================================ */
+
+/*
+ * ArrowType: Type of rule arrow
+ * 
+ * Different arrow types indicate different rule semantics:
+ * - FORWARD (-->): Standard evolution rule
+ * - BIDIRECTIONAL (<-->): Communication rule between membranes
+ */
+ArrowType ::= FORWARD | BIDIRECTIONAL
+
+/*
+ * HR: Hand Rule (base for LHR and RHR)
+ * 
+ * Both left-hand and right-hand sides of rules contain a multiset
+ * of objects that exist outside the specified membrane.
+ */
+schema HR
+  multiset: Multiset
+where
+  -- Multiset is well-formed
+end
+
+/*
+ * LHR: Left-Hand Rule
+ * 
+ * The left-hand side specifies:
+ * - Objects in the parent region (multiset)
+ * - A membrane with its contents and inner membranes
+ * 
+ * The LHR defines the pattern that must be matched for the rule to apply.
+ * 
+ * Invariants:
+ * - The membrane structure must be well-formed
+ * - All multisets must contain only objects with positive multiplicities
+ */
+schema LHR
+  HR
+  membrane: OMembrane
+where
+  -- Membrane is well-formed
+  ∀ obj: dom membrane.multiset.objects • 
+    membrane.multiset.objects(obj).multiplicity > 0
+end
+
+/*
+ * RHR: Right-Hand Rule
+ * 
+ * The right-hand side specifies:
+ * - Objects in the parent region (multiset)
+ * - A sequence of membranes produced by the rule
+ * 
+ * The RHR defines what is produced when the rule is applied.
+ * 
+ * Special cases:
+ * - Empty sequence: membrane dissolution
+ * - Multiple membranes: membrane division
+ * - Single membrane: standard evolution
+ * 
+ * Invariants:
+ * - All produced membranes are well-formed
+ * - Produced membranes have compatible labels with the LHR
+ */
+schema RHR
+  HR
+  producedMembranes: seq OMembrane
+where
+  -- All produced membranes are well-formed
+  ∀ i: dom producedMembranes • 
+    ∀ obj: dom producedMembranes(i).multiset.objects • 
+      producedMembranes(i).multiset.objects(obj).multiplicity > 0
+end
+
+/*
+ * Rule: Complete evolution rule
+ * 
+ * A rule specifies how membranes and objects evolve in a P-system.
+ * 
+ * Components:
+ * - lhr: The pattern to match (what is consumed)
+ * - arrow: The type of evolution
+ * - rhr: What is produced
+ * - features: Additional properties (priority, probability, pattern, etc.)
+ * 
+ * Invariants:
+ * - The rule must be type-consistent
+ * - Features must be compatible with the rule type
+ * - Division rules must have rhr.producedMembranes.size > 1
+ * - Dissolution rules must have rhr.producedMembranes.size = 0
+ */
+schema Rule
+  lhr: LHR
+  arrow: ArrowType
+  rhr: RHR
+  features: Features
+where
+  -- Type consistency
+  arrow = BIDIRECTIONAL ⇒ 
+    lhr.multiset.objects = ∅ ∧ 
+    rhr.multiset.objects = ∅ ∧
+    #rhr.producedMembranes = 1
+  
+  -- Feature constraints
+  "priority" ∈ dom features.attributes ⇒ 
+    features.attributes("priority").type_ = INT ∨
+    features.attributes("priority").type_ = LONG
+  
+  "probability" ∈ dom features.attributes ⇒ 
+    features.attributes("probability").type_ = DOUBLE ∧
+    features.attributes("probability").doubleValue ∈ 0.0..1.0
+  
+  "pattern" ∈ dom features.attributes ⇒ 
+    features.attributes("pattern").type_ = STRING
+end
+
+/* ============================================================================
+ * SECTION 5: SEMANTICS AND PATTERNS
+ * ============================================================================ */
+
+/*
+ * Semantics: Rule application constraints
+ * 
+ * Semantics define how rules can be applied in a P-system.
+ * This can include constraints on the number of applications,
+ * which patterns are allowed, and hierarchical composition.
+ * 
+ * Components:
+ * - value: Maximum number of applications (or ∞)
+ * - inf: Whether unlimited applications are allowed
+ * - patterns: Set of pattern names this semantics node allows
+ * - children: Hierarchical semantic composition
+ * 
+ * Invariants:
+ * - If inf is true, value is ignored
+ * - Patterns must be disjoint across siblings
+ */
+schema Semantics
+  value: ℕ
+  inf: 𝔹
+  patterns: ℙ String
+  children: seq Semantics
+where
+  -- If infinite, value is irrelevant
+  inf = TRUE ⇒ value = 0
+  
+  -- Disjoint patterns across siblings
+  ∀ i, j: dom children • i ≠ j ⇒ 
+    children(i).patterns ∩ children(j).patterns = ∅
+end
+
+/* ============================================================================
+ * SECTION 6: P-SYSTEM DEFINITION
+ * ============================================================================ */
+
+/*
+ * Psystem: Complete P-system specification
+ * 
+ * A P-system consists of:
+ * - model: Name of the membrane computing model
+ * - structure: Initial membrane hierarchy
+ * - multisets: Initial contents for each membrane label
+ * - rules: Set of evolution rules
+ * - semantics: Constraints on rule application
+ * - features: Global system properties
+ * 
+ * Invariants:
+ * - All rules are well-formed
+ * - All rules reference labels that exist in the structure
+ * - All multisets reference labels that exist in the structure
+ * - Semantics patterns match rule patterns
+ */
+schema Psystem
+  model: String
+  structure: Membrane
+  multisets: Label ⇸ Multiset
+  rules: ℙ Rule
+  semantics: Semantics
+  features: Features
+where
+  -- All multisets correspond to existing labels
+  ∀ label: dom multisets • 
+    existsInStructure(structure, label)
+  
+  -- All rules reference existing labels
+  ∀ rule: rules • 
+    existsInStructure(structure, rule.lhr.membrane.label)
+  
+  -- Pattern consistency
+  ∀ rule: rules • 
+    "pattern" ∈ dom rule.features.attributes ⇒ 
+      existsInSemantics(semantics, 
+        rule.features.attributes("pattern").stringValue)
+end
+
+/* Helper functions (axiomatic definitions) */
+
+-- Check if a label exists somewhere in the membrane structure
+existsInStructure: Membrane × Label → 𝔹
+
+∀ m: Membrane, l: Label •
+  existsInStructure(m, l) ⇔ 
+    m.label = l ∨ 
+    (∃ child: ran m.children • existsInStructure(child, l))
+
+-- Check if a pattern exists in the semantics tree
+existsInSemantics: Semantics × seq ℤ → 𝔹
+
+∀ s: Semantics, pattern: seq ℤ •
+  existsInSemantics(s, pattern) ⇔ 
+    (∃ p: s.patterns • p.str_ = pattern) ∨
+    (∃ child: ran s.children • existsInSemantics(child, pattern))
+
+/* ============================================================================
+ * SECTION 7: RUNTIME CONFIGURATION
+ * ============================================================================ */
+
+/*
+ * CMembrane: Configuration membrane (runtime state)
+ * 
+ * During simulation, membranes are represented as CMembrane instances
+ * which include runtime information:
+ * - parent: Index of parent membrane (-1 for root)
+ * - children: Indices of child membranes
+ * - priorityLevel: Current priority level for rule application
+ * - semantics: Current semantic constraints
+ * 
+ * Invariants:
+ * - Parent-child relationships are consistent
+ * - No cycles in the membrane tree
+ * - Priority level is valid
+ */
+schema CMembrane
+  IMembrane
+  parent: ℤ
+  children: seq ℤ
+  priorityLevel: ℤ
+  semantics: Semantics
+where
+  -- Valid parent index
+  parent ≥ -1
+  
+  -- Valid child indices
+  ∀ child: ran children • child ≥ 0
+  
+  -- No self-reference
+  parent ≠ -1 ⇒ (∀ child: ran children • child ≠ parent)
+end
+
+/*
+ * Configuration: P-system runtime state
+ * 
+ * A configuration represents the complete state of a P-system at a
+ * specific point in time during simulation.
+ * 
+ * Components:
+ * - time: Current simulation time step
+ * - environment: Objects in the environment (outside all membranes)
+ * - membranes: All membranes in the system
+ * 
+ * Invariants:
+ * - Exactly one root membrane (parent = -1)
+ * - Parent-child relationships form a tree
+ * - All child indices are valid
+ * - No membrane cycles
+ */
+schema Configuration
+  time: ℕ
+  environment: Multiset
+  membranes: seq CMembrane
+where
+  -- Exactly one root
+  #{ i: dom membranes | membranes(i).parent = -1 } = 1
+  
+  -- Valid parent-child relationships
+  ∀ i: dom membranes • 
+    membranes(i).parent ≠ -1 ⇒ 
+      membranes(i).parent ∈ dom membranes ∧
+      i ∈ ran membranes(membranes(i).parent).children
+  
+  -- Valid child indices
+  ∀ i: dom membranes • 
+    ∀ child: ran membranes(i).children • 
+      child ∈ dom membranes ∧
+      membranes(child).parent = i
+  
+  -- No cycles (enforced by tree structure)
+  -- This is implicitly guaranteed by the parent pointer forming a tree
+end
+
+/*
+ * File: Serializable P-system
+ * 
+ * A File represents a complete P-system that can be serialized to/from
+ * various formats (JSON, XML, Binary).
+ * 
+ * Components:
+ * - header: File format identifier
+ * - version: P-Lingua version
+ * - psystem: The actual P-system specification
+ */
+schema File
+  header: String
+  version: String
+  psystem: Psystem
+where
+  header.str_ = "P-Lingua output file"
+  #version.str_ > 0
+end
+
+/* ============================================================================
+ * SECTION 8: ALPHABET AND IDENTIFIERS
+ * ============================================================================ */
+
+/*
+ * UId: Unique identifier
+ * 
+ * During serialization, strings are replaced with unique integer IDs
+ * for efficiency. A UId represents a compressed identifier.
+ * 
+ * Components:
+ * - id: The unique integer identifier
+ * - max: The maximum ID value in the alphabet
+ * 
+ * Invariants:
+ * - ID is within valid range
+ */
+schema UId
+  id: ℕ
+  max: ℕ
+where
+  id ≤ max
+end
+
+/*
+ * Alphabet: Global symbol table
+ * 
+ * The Alphabet maintains mappings between strings and unique IDs
+ * for objects, labels, features, and general strings.
+ * 
+ * Invariants:
+ * - All mappings are bijective
+ * - IDs are contiguous (0..size-1)
+ * - Maximum multiplicity tracks the largest object count
+ */
+schema Alphabet
+  objects: String ⤖ UId
+  labels: String ⤖ UId
+  features: String ⤖ UId
+  strings: String ⤖ UId
+  maxMultiplicity: ℕ
+where
+  -- Bijective mappings
+  objects ∈ String ⤖ UId
+  labels ∈ String ⤖ UId
+  features ∈ String ⤖ UId
+  strings ∈ String ⤖ UId
+  
+  -- Contiguous IDs
+  ∀ category: {objects, labels, features, strings} •
+    let size = #category in
+    (∀ s: dom category • category(s).id < size) ∧
+    (∀ i: 0..(size-1) • ∃ s: dom category • category(s).id = i)
+  
+  -- Max multiplicity is reasonable
+  maxMultiplicity > 0
+end
+
+/* ============================================================================
+ * END OF DATA MODEL SPECIFICATION
+ * ============================================================================ */

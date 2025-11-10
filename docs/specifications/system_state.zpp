@@ -1,0 +1,643 @@
+/*
+ * P-Lingua System State Formal Specification (Z++)
+ * 
+ * This specification formally defines the system state for both the
+ * compiler/parser and the simulator components of P-Lingua.
+ * 
+ * It builds upon the data model specification and defines how state
+ * evolves during compilation and simulation.
+ */
+
+/* ============================================================================
+ * IMPORTS FROM DATA MODEL
+ * ============================================================================ */
+
+-- Import all data model schemas
+-- (In practice, this would reference data_model.zpp)
+-- Here we reference key types that are used
+
+-- Basic types
+Value, Multiplicity, String, ObjectString, LabelString, FeatureString
+
+-- Composite types
+Label, Multiset, Features
+
+-- Membrane types
+Membrane, IMembrane, OMembrane, CMembrane
+
+-- Rule types
+Rule, LHR, RHR, Semantics
+
+-- P-System types
+Psystem, Configuration, File
+
+-- Auxiliary types
+UId, Alphabet
+
+/* ============================================================================
+ * SECTION 1: PARSER STATE
+ * ============================================================================ */
+
+/*
+ * NodeType: Types of syntax tree nodes
+ * 
+ * The parser builds an Abstract Syntax Tree (AST) where each node
+ * has a specific type indicating its syntactic role.
+ */
+NodeType ::= 
+  -- Top-level
+  PLINGUA | DEFINITIONS | DEFINITION | MODULE | INCLUDE |
+  -- Variables and expressions
+  VARIABLE | EXPR | LITERAL | BINARY_OP | UNARY_OP |
+  -- Control flow
+  IF | ELSE | WHILE | DO | FOR | RETURN |
+  -- System structures
+  MEMBRANE_STRUCTURE | MULTISET | RULE | PATTERN |
+  -- Call expressions
+  CALL | SYSTEM_CALL | ARGUMENTS | PARAMETERS |
+  -- Model definition
+  MODEL | MODEL_DEFINITION | MODEL_BODY |
+  -- Features
+  FEATURE | PRIORITY | PROBABILITY
+
+/*
+ * ErrorLevel: Severity of parser messages
+ */
+ErrorLevel ::= FATAL | ERROR | WARNING | INFO | 
+               DEBUG_1 | DEBUG_2 | DEBUG_3 | DEBUG_4
+
+/*
+ * Location: Source code position
+ * 
+ * Tracks the position of a token or node in the source code
+ * for error reporting and debugging.
+ * 
+ * Invariants:
+ * - Line and column numbers are positive
+ * - End position is after or equal to start position
+ */
+schema Location
+  file: ℕ
+  first_line: ℕ₁
+  first_column: ℕ₁
+  last_line: ℕ₁
+  last_column: ℕ₁
+  valid: 𝔹
+where
+  valid = TRUE ⇒ 
+    (last_line > first_line ∨ 
+     (last_line = first_line ∧ last_column ≥ first_column))
+end
+
+/*
+ * NodeValue: Value stored in a syntax tree node
+ * 
+ * Nodes can store various types of values depending on their role.
+ * This is a union type similar to the Value type but used specifically
+ * for AST nodes.
+ */
+schema NodeValue
+  value: Value
+  -- Additional node-specific data could be added here
+where
+  -- Value must be well-formed
+end
+
+/*
+ * Node: Syntax tree node
+ * 
+ * Represents a node in the Abstract Syntax Tree built by the parser.
+ * 
+ * Components:
+ * - type: The syntactic type of this node
+ * - value: Optional value stored at this node
+ * - loc: Source location information
+ * - children: Child nodes in the tree
+ * 
+ * Invariants:
+ * - Children are well-formed nodes
+ * - Location is valid if node is from source
+ */
+schema Node
+  type: NodeType
+  value: NodeValue
+  loc: Location
+  children: seq Node
+where
+  -- All children are reachable and well-formed
+  ∀ child: ran children • child.loc.valid ⇒ 
+    child.loc.file = loc.file
+end
+
+/*
+ * Scope: Variable scope management
+ * 
+ * Manages variable bindings and their visibility during parsing
+ * and semantic analysis.
+ * 
+ * Invariants:
+ * - Variables are uniquely named within a scope
+ * - Parent scope is properly linked
+ */
+schema Scope
+  variables: String ⇸ NodeValue
+  parent: Scope option
+where
+  -- Variables in this scope are well-defined
+  ∀ name: dom variables • variables(name).value.type_ ∈ ValueType
+end
+
+/*
+ * Memory: Global memory state
+ * 
+ * Maintains the runtime state of variables during parsing and
+ * unrolling of P-Lingua programs.
+ */
+schema Memory
+  globalScope: Scope
+  currentScope: Scope
+  scopeStack: seq Scope
+where
+  -- Current scope is on the stack or is global
+  currentScope ∈ ran scopeStack ∨ currentScope = globalScope
+  
+  -- Stack is properly nested
+  ∀ i: dom scopeStack • 
+    i > 1 ⇒ scopeStack(i).parent = some scopeStack(i-1)
+end
+
+/*
+ * ParserState: Complete parser state
+ * 
+ * Maintains all information needed during parsing and compilation
+ * of P-Lingua source files.
+ * 
+ * Components:
+ * - files: List of input files being processed
+ * - includePaths: Directories to search for includes
+ * - lines: Source code lines for each file
+ * - currentFile: Index of file currently being parsed
+ * - currentLine: Current line number
+ * - currentColumn: Current column number
+ * - errorCounter: Number of errors encountered
+ * - warningCounter: Number of warnings encountered
+ * - verbosityLevel: Detail level for output (0-7)
+ * - root: Root of the syntax tree
+ * - memory: Variable storage and scoping
+ * - modules: Defined modules (functions)
+ * - patterns: Defined rule patterns
+ * - models: Defined semantic models
+ * - hasStructure: Whether membrane structure has been defined
+ * - outputFormat: Desired output format
+ * - outputFile: Output file path
+ * 
+ * Invariants:
+ * - Current file index is valid
+ * - Current line/column are within file bounds
+ * - Error counts are non-negative
+ * - Verbosity level is in valid range
+ * - Root node is well-formed
+ */
+schema ParserState
+  files: seq String
+  includePaths: seq String
+  lines: seq (seq String)
+  currentFile: ℕ
+  currentLine: ℕ
+  currentColumn: ℕ
+  errorCounter: ℕ
+  warningCounter: ℕ
+  verbosityLevel: ℕ
+  root: Node
+  memory: Memory
+  modules: String ⇸ Node
+  patterns: String ⇸ ℙ Rule
+  models: String ⇸ Semantics
+  hasStructure: 𝔹
+  outputFormat: String
+  outputFile: String
+where
+  -- Valid file index
+  #files > 0 ⇒ currentFile ∈ dom files
+  
+  -- Valid line/column
+  currentFile ∈ dom files ∧ currentFile ∈ dom lines ⇒ 
+    currentLine ∈ dom lines(currentFile)
+  
+  -- Valid verbosity
+  verbosityLevel ≤ 7
+  
+  -- Root is valid
+  root.type = PLINGUA
+  
+  -- All modules are well-formed
+  ∀ name: dom modules • 
+    modules(name).type = MODULE
+  
+  -- All patterns are valid rules
+  ∀ patternName: dom patterns • 
+    ∀ rule: patterns(patternName) • 
+      "pattern" ∈ dom rule.features.attributes
+  
+  -- Output format is recognized
+  outputFormat ∈ {"json", "xml", "bin", "bin2", "c++"}
+end
+
+/* ============================================================================
+ * SECTION 2: SIMULATOR STATE
+ * ============================================================================ */
+
+/*
+ * RuleSet: Rules indexed by membrane type
+ * 
+ * For efficient simulation, rules are pre-indexed by the membrane
+ * label and charge they apply to.
+ * 
+ * Structure: Label → Charge → Sequence of Rules
+ * 
+ * Invariants:
+ * - All rules in a set match the indexing key
+ * - Rules are sorted by priority
+ */
+schema RuleSet
+  rules: Label ⇸ (ℤ ⇸ seq Rule)
+where
+  -- Valid charge values
+  ∀ label: dom rules • 
+    ∀ charge: dom rules(label) • 
+      charge ∈ {-1, 0, 1}
+  
+  -- All rules match their index
+  ∀ label: dom rules • 
+    ∀ charge: dom rules(label) • 
+      ∀ rule: ran rules(label)(charge) • 
+        rule.lhr.membrane.label = label ∧
+        rule.lhr.membrane.charge.charge = charge
+  
+  -- Rules are sorted by priority
+  ∀ label: dom rules • 
+    ∀ charge: dom rules(label) • 
+      let ruleSeq = rules(label)(charge) in
+      ∀ i: 1..(#ruleSeq - 1) • 
+        priority(ruleSeq(i)) ≤ priority(ruleSeq(i+1))
+end
+
+-- Helper function to get rule priority
+priority: Rule → ℤ
+
+∀ r: Rule •
+  priority(r) = 
+    if "priority" ∈ dom r.features.attributes
+    then r.features.attributes("priority").longValue
+    else 0
+
+/*
+ * SelectedRule: A rule selected for execution
+ * 
+ * During simulation, rules are selected with a specific number
+ * of applications for a specific membrane instance.
+ * 
+ * Components:
+ * - membraneId: Index of the membrane in the configuration
+ * - ruleIndex: Index of the rule in the rule set
+ * - applications: Number of times to apply the rule
+ * 
+ * Invariants:
+ * - Applications is positive
+ * - Indices are valid
+ */
+schema SelectedRule
+  membraneId: ℕ
+  ruleIndex: ℕ
+  applications: ℕ₁
+where
+  applications > 0
+end
+
+/*
+ * SimulatorState: Complete simulator state
+ * 
+ * Maintains all information needed during P-system simulation.
+ * 
+ * Components:
+ * - file: The P-system being simulated
+ * - configuration: Current system configuration
+ * - ruleSets: Pre-indexed rules for efficiency
+ * - selectedRules: Rules selected for current step
+ * - freeIndexes: Recycled membrane indices
+ * - finished: Whether simulation has completed
+ * - initialTime: Starting time step
+ * - maxSteps: Maximum steps to simulate (0 = unlimited)
+ * - randomized: Whether to use randomized selection
+ * - verbosityLevel: Output detail level
+ * - configurationFile: Optional initial configuration
+ * - outputFile: Optional output file
+ * 
+ * Invariants:
+ * - Configuration is well-formed
+ * - Selected rules reference valid membranes
+ * - Free indexes are valid and unused
+ * - Time progresses monotonically
+ */
+schema SimulatorState
+  file: File
+  configuration: Configuration
+  ruleSets: RuleSet
+  selectedRules: ℙ SelectedRule
+  freeIndexes: seq ℕ
+  finished: 𝔹
+  initialTime: ℕ
+  maxSteps: ℕ
+  randomized: 𝔹
+  verbosityLevel: ℕ
+  configurationFile: String option
+  outputFile: String option
+where
+  -- Configuration time is valid
+  configuration.time ≥ initialTime
+  
+  -- Selected rules reference valid membranes
+  ∀ sr: selectedRules • 
+    sr.membraneId ∈ dom configuration.membranes ∧
+    sr.membraneId ∉ ran freeIndexes
+  
+  -- Free indexes are within bounds
+  ∀ idx: ran freeIndexes • 
+    idx ∈ dom configuration.membranes
+  
+  -- Free indexes are actually free (parent = -2)
+  ∀ idx: ran freeIndexes • 
+    configuration.membranes(idx).parent = -2
+  
+  -- Free indexes are unique
+  ∀ i, j: dom freeIndexes • 
+    i ≠ j ⇒ freeIndexes(i) ≠ freeIndexes(j)
+  
+  -- Verbosity is valid
+  verbosityLevel ≤ 7
+  
+  -- Finished when max steps reached or no rules selected
+  finished = TRUE ⇔ 
+    (maxSteps > 0 ∧ configuration.time - initialTime ≥ maxSteps) ∨
+    selectedRules = ∅
+end
+
+/* ============================================================================
+ * SECTION 3: SYSTEM STATE (COMBINED)
+ * ============================================================================ */
+
+/*
+ * SystemState: Top-level system state
+ * 
+ * The complete state of the P-Lingua system, which can be in
+ * one of several modes: parsing, compiling, or simulating.
+ * 
+ * Components:
+ * - mode: Current operational mode
+ * - parserState: State when in parser/compiler mode
+ * - simulatorState: State when in simulator mode
+ * - alphabet: Global symbol table
+ * 
+ * Invariants:
+ * - Active state matches current mode
+ * - States are well-formed
+ * - Alphabet is consistent with active state
+ */
+SystemMode ::= PARSING | COMPILING | SIMULATING | IDLE
+
+schema SystemState
+  mode: SystemMode
+  parserState: ParserState option
+  simulatorState: SimulatorState option
+  alphabet: Alphabet
+where
+  -- Parser state exists when in parser/compiler mode
+  mode ∈ {PARSING, COMPILING} ⇔ parserState ≠ none
+  
+  -- Simulator state exists when in simulator mode
+  mode = SIMULATING ⇔ simulatorState ≠ none
+  
+  -- Alphabet is populated when in use
+  mode ≠ IDLE ⇒ 
+    #alphabet.objects > 0 ∨
+    #alphabet.labels > 0 ∨
+    #alphabet.features > 0
+end
+
+/* ============================================================================
+ * SECTION 4: STATE INVARIANTS
+ * ============================================================================ */
+
+/*
+ * WellFormedParserState: Parser state consistency
+ * 
+ * Defines global invariants that must hold throughout parsing.
+ */
+schema WellFormedParserState
+  ParserState
+where
+  -- If structure is defined, it must be in memory
+  hasStructure = TRUE ⇒ 
+    ∃ node: Node • 
+      node.type = MEMBRANE_STRUCTURE ∧
+      descendant(root, node)
+  
+  -- All referenced modules exist
+  ∀ node: Node • 
+    node.type = CALL ⇒ 
+      ∃ name: String • 
+        name ∈ dom modules ∧
+        moduleMatches(node, modules(name))
+  
+  -- Pattern usage is consistent
+  ∀ patternName: dom patterns • 
+    patternName ∈ dom models ⇒ 
+      patternUsedInModel(patternName, models(patternName))
+end
+
+-- Helper predicates
+descendant: Node × Node → 𝔹
+moduleMatches: Node × Node → 𝔹
+patternUsedInModel: String × Semantics → 𝔹
+
+/*
+ * WellFormedSimulatorState: Simulator state consistency
+ * 
+ * Defines global invariants that must hold throughout simulation.
+ */
+schema WellFormedSimulatorState
+  SimulatorState
+where
+  -- Configuration membranes form a tree
+  ∀ i: dom configuration.membranes • 
+    configuration.membranes(i).parent ≠ -2 ⇒ 
+      noMembraneLoops(configuration, i)
+  
+  -- All rules in ruleSets come from the P-system
+  ∀ label: dom ruleSets.rules • 
+    ∀ charge: dom ruleSets.rules(label) • 
+      ∀ rule: ran ruleSets.rules(label)(charge) • 
+        rule ∈ file.psystem.rules
+  
+  -- Selected rules are applicable
+  ∀ sr: selectedRules • 
+    let m = configuration.membranes(sr.membraneId) in
+    let rules = ruleSets.rules(m.label)(m.charge.charge) in
+    sr.ruleIndex ∈ dom rules ∧
+    canApply(m, rules(sr.ruleIndex), sr.applications, configuration)
+end
+
+-- Helper predicates
+noMembraneLoops: Configuration × ℕ → 𝔹
+canApply: CMembrane × Rule × ℕ × Configuration → 𝔹
+
+∀ config: Configuration, idx: ℕ •
+  noMembraneLoops(config, idx) ⇔ 
+    let visited: ℙ ℕ = {idx} in
+    ∀ parent: ℕ • 
+      isAncestor(config, parent, idx) ⇒ parent ∉ visited
+
+isAncestor: Configuration × ℕ × ℕ → 𝔹
+
+∀ config: Configuration, ancestor, descendant: ℕ •
+  isAncestor(config, ancestor, descendant) ⇔ 
+    let m = config.membranes(descendant) in
+    m.parent = ancestor ∨
+    (m.parent ≠ -1 ∧ isAncestor(config, ancestor, m.parent))
+
+/* ============================================================================
+ * SECTION 5: STATE TRANSITIONS (PREVIEW)
+ * ============================================================================ */
+
+/*
+ * StateTransition: Abstract state change
+ * 
+ * Represents a transition from one system state to another.
+ * Specific operations will refine this schema.
+ */
+schema StateTransition
+  ΔSystemState
+  -- Additional components will be added in operations.zpp
+where
+  -- Time never goes backward in simulator
+  mode = SIMULATING ∧ mode' = SIMULATING ⇒ 
+    let ss = the simulatorState in
+    let ss' = the simulatorState' in
+    ss'.configuration.time ≥ ss.configuration.time
+  
+  -- Alphabet only grows
+  alphabet.objects ⊆ alphabet'.objects ∧
+  alphabet.labels ⊆ alphabet'.labels ∧
+  alphabet.features ⊆ alphabet'.features
+end
+
+/* ============================================================================
+ * SECTION 6: QUERY OPERATIONS (READ-ONLY)
+ * ============================================================================ */
+
+/*
+ * GetConfiguration: Read current configuration
+ * 
+ * Returns the current P-system configuration when in simulator mode.
+ */
+schema GetConfiguration
+  ΞSystemState
+  config!: Configuration
+where
+  mode = SIMULATING
+  config! = the (simulatorState).configuration
+end
+
+/*
+ * GetPsystem: Read compiled P-system
+ * 
+ * Returns the P-system specification when available.
+ */
+schema GetPsystem
+  ΞSystemState
+  psystem!: Psystem
+where
+  mode ∈ {COMPILING, SIMULATING}
+  
+  mode = COMPILING ⇒ 
+    psystem! = constructedPsystem(parserState)
+  
+  mode = SIMULATING ⇒ 
+    psystem! = the (simulatorState).file.psystem
+end
+
+-- Helper function to extract P-system from parser state
+constructedPsystem: ParserState → Psystem
+
+/*
+ * GetSyntaxTree: Read parser syntax tree
+ * 
+ * Returns the abstract syntax tree when in parser mode.
+ */
+schema GetSyntaxTree
+  ΞSystemState
+  tree!: Node
+where
+  mode ∈ {PARSING, COMPILING}
+  tree! = the (parserState).root
+end
+
+/*
+ * CheckFinished: Check if simulation is complete
+ * 
+ * Determines whether simulation has finished.
+ */
+schema CheckFinished
+  ΞSystemState
+  finished!: 𝔹
+where
+  mode = SIMULATING
+  finished! = the (simulatorState).finished
+end
+
+/* ============================================================================
+ * SECTION 7: ERROR HANDLING STATE
+ * ============================================================================ */
+
+/*
+ * ErrorState: System error condition
+ * 
+ * Represents an error state where the system cannot proceed.
+ * 
+ * Components:
+ * - level: Severity of the error
+ * - message: Error description
+ * - location: Source location (if applicable)
+ */
+schema ErrorState
+  level: ErrorLevel
+  message: String
+  location: Location option
+where
+  level ∈ {FATAL, ERROR}
+  #message.str_ > 0
+end
+
+/*
+ * SystemStateWithError: State that may have errors
+ * 
+ * Extends SystemState with error information.
+ */
+schema SystemStateWithError
+  SystemState
+  errors: seq ErrorState
+  warnings: seq ErrorState
+where
+  -- Errors have appropriate level
+  ∀ e: ran errors • e.level ∈ {FATAL, ERROR}
+  
+  -- Warnings have appropriate level
+  ∀ w: ran warnings • w.level = WARNING
+  
+  -- Fatal errors prevent further processing
+  (∃ e: ran errors • e.level = FATAL) ⇒ mode = IDLE
+end
+
+/* ============================================================================
+ * END OF SYSTEM STATE SPECIFICATION
+ * ============================================================================ */

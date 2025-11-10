@@ -1,0 +1,1042 @@
+/*
+ * P-Lingua Operations Formal Specification (Z++)
+ * 
+ * This specification formally defines the operations that transform
+ * the system state in P-Lingua, covering both compilation and simulation.
+ * 
+ * Operations are specified with preconditions (what must be true before)
+ * and postconditions (what is guaranteed after).
+ */
+
+/* ============================================================================
+ * IMPORTS
+ * ============================================================================ */
+
+-- Import data model and system state specifications
+-- (References data_model.zpp and system_state.zpp)
+
+/* ============================================================================
+ * SECTION 1: PARSER OPERATIONS
+ * ============================================================================ */
+
+/*
+ * InitializeParser: Start parsing session
+ * 
+ * Preconditions:
+ * - System is in IDLE mode
+ * - Input files are provided
+ * - Include paths are valid
+ * 
+ * Postconditions:
+ * - System enters PARSING mode
+ * - Parser state is initialized
+ * - No errors have occurred
+ */
+schema InitializeParser
+  ΔSystemState
+  inputFiles?: seq String
+  includePaths?: seq String
+  verbosity?: ℕ
+where
+  -- Preconditions
+  mode = IDLE
+  #inputFiles? > 0
+  verbosity? ≤ 7
+  
+  -- Postconditions
+  mode' = PARSING
+  parserState' ≠ none
+  
+  let ps = the parserState' in
+  ps.files = inputFiles? ∧
+  ps.includePaths = includePaths? ∧
+  ps.verbosityLevel = verbosity? ∧
+  ps.errorCounter = 0 ∧
+  ps.warningCounter = 0 ∧
+  ps.currentFile = 0 ∧
+  ps.currentLine = 0 ∧
+  ps.currentColumn = 0 ∧
+  ps.hasStructure = FALSE
+  
+  simulatorState' = none
+end
+
+/*
+ * TokenizeInput: Lexical analysis
+ * 
+ * Performs tokenization of input source code using Flex lexer.
+ * 
+ * Preconditions:
+ * - System is in PARSING mode
+ * - Current file is valid
+ * 
+ * Postconditions:
+ * - Tokens are generated and added to parse stream
+ * - Current position is updated
+ * - Errors are reported if invalid tokens found
+ */
+schema TokenizeInput
+  ΔSystemState
+  tokens!: seq Token
+where
+  -- Preconditions
+  mode = PARSING
+  let ps = the parserState in
+  ps.currentFile ∈ dom ps.files
+  
+  -- Postconditions
+  mode' = PARSING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- Position advances
+  ps'.currentColumn ≥ ps.currentColumn ∨
+  ps'.currentLine > ps.currentLine
+  
+  -- Errors may increase
+  ps'.errorCounter ≥ ps.errorCounter
+  ps'.warningCounter ≥ ps.warningCounter
+end
+
+/*
+ * ParseTokens: Syntax analysis
+ * 
+ * Builds abstract syntax tree from tokens using Bison parser.
+ * 
+ * Preconditions:
+ * - System is in PARSING mode
+ * - Tokens are available
+ * 
+ * Postconditions:
+ * - Syntax tree is constructed
+ * - Syntax errors are detected and reported
+ * - System may transition to COMPILING mode if successful
+ */
+schema ParseTokens
+  ΔSystemState
+  tokens?: seq Token
+where
+  -- Preconditions
+  mode = PARSING
+  #tokens? > 0
+  
+  -- Postconditions
+  mode' ∈ {PARSING, COMPILING}
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- Tree is constructed
+  ps'.root.type = PLINGUA ∧
+  #ps'.root.children ≥ #ps.root.children
+  
+  -- Successful parse enters compilation
+  ps'.errorCounter = ps.errorCounter ⇒ mode' = COMPILING
+  
+  -- Errors prevent compilation
+  ps'.errorCounter > ps.errorCounter ⇒ mode' = PARSING
+end
+
+/*
+ * ProcessIncludes: Handle @include directives
+ * 
+ * Processes @include directives by loading referenced files.
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * - Include nodes exist in syntax tree
+ * 
+ * Postconditions:
+ * - Included files are parsed and integrated
+ * - Include paths are searched
+ * - Circular includes are detected
+ */
+schema ProcessIncludes
+  ΔSystemState
+where
+  -- Preconditions
+  mode = COMPILING
+  let ps = the parserState in
+  ∃ node: Node • 
+    node.type = INCLUDE ∧ descendant(ps.root, node)
+  
+  -- Postconditions
+  mode' = COMPILING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- More files may be added
+  #ps'.files ≥ #ps.files
+  
+  -- No circular includes
+  ¬circularInclude(ps'.files)
+end
+
+/*
+ * RegisterModules: Process module definitions
+ * 
+ * Registers all def-defined modules (functions) for later use.
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * - Module definitions exist in syntax tree
+ * 
+ * Postconditions:
+ * - All modules are registered with their names
+ * - Module signatures are validated
+ * - Duplicate definitions are detected
+ */
+schema RegisterModules
+  ΔSystemState
+where
+  -- Preconditions
+  mode = COMPILING
+  
+  -- Postconditions
+  mode' = COMPILING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- Modules are registered
+  ∀ node: Node • 
+    node.type = MODULE ∧ descendant(ps'.root, node) ⇒ 
+      ∃ name: String • 
+        name ∈ dom ps'.modules ∧
+        ps'.modules(name) = node
+  
+  -- No duplicate module names
+  ∀ m1, m2: dom ps'.modules • 
+    m1 ≠ m2 ⇒ 
+      getModuleName(ps'.modules(m1)) ≠ getModuleName(ps'.modules(m2))
+end
+
+/*
+ * ProcessGlobalVariables: Handle global variable declarations
+ * 
+ * Processes let statements and command-line variable definitions.
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * 
+ * Postconditions:
+ * - Global variables are registered in memory
+ * - Initial values are computed
+ * - Type consistency is checked
+ */
+schema ProcessGlobalVariables
+  ΔSystemState
+  globalVars?: String ⇸ Value
+where
+  -- Preconditions
+  mode = COMPILING
+  
+  -- Postconditions
+  mode' = COMPILING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- Global variables are registered
+  dom globalVars? ⊆ dom ps'.memory.globalScope.variables
+  
+  -- Values are set correctly
+  ∀ name: dom globalVars? • 
+    ps'.memory.globalScope.variables(name).value = globalVars?(name)
+end
+
+/*
+ * ProcessPatterns: Handle pattern definitions
+ * 
+ * Processes rule pattern templates for later instantiation.
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * - Pattern definitions exist
+ * 
+ * Postconditions:
+ * - Patterns are registered
+ * - Pattern rules are validated
+ * - Patterns can be referenced by name
+ */
+schema ProcessPatterns
+  ΔSystemState
+where
+  -- Preconditions
+  mode = COMPILING
+  
+  -- Postconditions
+  mode' = COMPILING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- All patterns are registered
+  ∀ node: Node • 
+    node.type = PATTERN ∧ descendant(ps'.root, node) ⇒ 
+      ∃ name: String, rules: ℙ Rule • 
+        name ∈ dom ps'.patterns ∧
+        ps'.patterns(name) = rules ∧
+        ∀ r: rules • "pattern" ∈ dom r.features.attributes
+end
+
+/*
+ * ProcessModel: Handle @model definition
+ * 
+ * Processes the semantic model definition for the P-system.
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * - Model definition exists
+ * 
+ * Postconditions:
+ * - Model semantics are registered
+ * - Pattern references are validated
+ * - Model is stored for later use
+ */
+schema ProcessModel
+  ΔSystemState
+where
+  -- Preconditions
+  mode = COMPILING
+  let ps = the parserState in
+  ∃ node: Node • 
+    node.type = MODEL ∧ descendant(ps.root, node)
+  
+  -- Postconditions
+  mode' = COMPILING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- Model is registered
+  ∃ name: String, sem: Semantics • 
+    name ∈ dom ps'.models ∧
+    ps'.models(name) = sem
+  
+  -- All pattern references are valid
+  ∀ name: String, sem: Semantics • 
+    name ∈ dom ps'.models ∧ sem = ps'.models(name) ⇒ 
+      ∀ pattern: sem.patterns • 
+        pattern ∈ dom ps'.patterns
+end
+
+/*
+ * ExecuteMain: Execute main() function
+ * 
+ * Executes the main function to construct the P-system.
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * - main() function is defined
+ * - All modules are registered
+ * 
+ * Postconditions:
+ * - Main function is executed
+ * - Membrane structure is defined
+ * - Initial multisets are specified
+ * - Rules are generated
+ */
+schema ExecuteMain
+  ΔSystemState
+  args?: seq Value
+where
+  -- Preconditions
+  mode = COMPILING
+  let ps = the parserState in
+  "main" ∈ dom ps.modules
+  
+  -- Postconditions
+  mode' = COMPILING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- Structure is now defined
+  ps'.hasStructure = TRUE
+  
+  -- Structure exists in memory
+  ∃ node: Node • 
+    node.type = MEMBRANE_STRUCTURE ∧
+    descendant(ps'.root, node)
+end
+
+/*
+ * UnrollRanges: Expand range-based constructs
+ * 
+ * Expands ranges in multisets, rules, and labels.
+ * Example: a{i} : 1<=i<=10 becomes a{1}, a{2}, ..., a{10}
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * - Ranges are present in constructs
+ * 
+ * Postconditions:
+ * - All ranges are expanded
+ * - Concrete instances are generated
+ * - Range variables are properly substituted
+ */
+schema UnrollRanges
+  ΔSystemState
+where
+  -- Preconditions
+  mode = COMPILING
+  
+  -- Postconditions
+  mode' = COMPILING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- No range nodes remain
+  ¬(∃ node: Node • 
+    node.type = RANGE ∧ descendant(ps'.root, node))
+  
+  -- All instances are generated
+  ∀ range: RangeSpec • 
+    inOriginalTree(range, ps.root) ⇒ 
+      allInstancesGenerated(range, ps'.root)
+end
+
+/*
+ * UnrollPatterns: Instantiate pattern rules
+ * 
+ * Instantiates pattern templates with concrete rules.
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * - Patterns are defined
+ * - Rules reference patterns
+ * 
+ * Postconditions:
+ * - Pattern rules are instantiated
+ * - Concrete rules are generated
+ * - Pattern constraints are satisfied
+ */
+schema UnrollPatterns
+  ΔSystemState
+where
+  -- Preconditions
+  mode = COMPILING
+  
+  -- Postconditions
+  mode' = COMPILING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- All pattern references are resolved
+  ∀ rule: Rule • 
+    "pattern" ∈ dom rule.features.attributes ⇒ 
+      rule.features.attributes("pattern").stringValue ∈ dom ps'.patterns
+end
+
+/*
+ * ValidatePsystem: Semantic validation
+ * 
+ * Validates the constructed P-system for semantic correctness.
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * - P-system is fully constructed
+ * 
+ * Postconditions:
+ * - All semantic rules are checked
+ * - Errors are reported if validation fails
+ * - System remains in COMPILING if valid
+ */
+schema ValidatePsystem
+  ΔSystemState
+where
+  -- Preconditions
+  mode = COMPILING
+  let ps = the parserState in
+  ps.hasStructure = TRUE
+  
+  -- Postconditions
+  mode' = COMPILING
+  
+  let ps = the parserState in
+  let ps' = the parserState' in
+  
+  -- Validation checks performed
+  structureIsValid(ps') ∧
+  rulesAreValid(ps') ∧
+  semanticsAreConsistent(ps')
+  
+  -- Errors reported if invalid
+  ps'.errorCounter > ps.errorCounter ⇒ 
+    ¬(structureIsValid(ps') ∧ 
+      rulesAreValid(ps') ∧ 
+      semanticsAreConsistent(ps'))
+end
+
+/*
+ * GenerateOutput: Produce output file
+ * 
+ * Generates output in the specified format.
+ * 
+ * Preconditions:
+ * - System is in COMPILING mode
+ * - P-system is valid
+ * - Output format is specified
+ * 
+ * Postconditions:
+ * - Output file is generated
+ * - Format is correct
+ * - File is written to disk
+ */
+schema GenerateOutput
+  ΔSystemState
+  success!: 𝔹
+where
+  -- Preconditions
+  mode = COMPILING
+  let ps = the parserState in
+  ps.hasStructure = TRUE ∧
+  ps.errorCounter = 0 ∧
+  #ps.outputFile.str_ > 0 ∧
+  ps.outputFormat ∈ {"json", "xml", "bin", "bin2", "c++"}
+  
+  -- Postconditions
+  mode' = IDLE
+  success! = TRUE ⇔ ps.errorCounter = 0
+  
+  -- Output generated
+  success! = TRUE ⇒ 
+    fileWritten(ps.outputFile, ps.outputFormat)
+end
+
+/* ============================================================================
+ * SECTION 2: SIMULATOR OPERATIONS
+ * ============================================================================ */
+
+/*
+ * InitializeSimulator: Start simulation
+ * 
+ * Initializes the simulator with a compiled P-system.
+ * 
+ * Preconditions:
+ * - System is in IDLE mode
+ * - Input file contains valid P-system
+ * 
+ * Postconditions:
+ * - System enters SIMULATING mode
+ * - Configuration is initialized
+ * - Rules are indexed
+ */
+schema InitializeSimulator
+  ΔSystemState
+  inputFile?: String
+  configFile?: String option
+  maxSteps?: ℕ
+  randomized?: 𝔹
+  verbosity?: ℕ
+where
+  -- Preconditions
+  mode = IDLE
+  #inputFile?.str_ > 0
+  verbosity? ≤ 7
+  
+  -- Postconditions
+  mode' = SIMULATING
+  simulatorState' ≠ none
+  
+  let ss = the simulatorState' in
+  ss.maxSteps = maxSteps? ∧
+  ss.randomized = randomized? ∧
+  ss.verbosityLevel = verbosity? ∧
+  ss.finished = FALSE ∧
+  ss.initialTime = ss.configuration.time
+  
+  -- Configuration is initialized
+  configFile? = none ⇒ 
+    ss.configuration.time = 0 ∧
+    configurationFromStructure(ss.file.psystem.structure, ss.configuration)
+  
+  configFile? ≠ none ⇒ 
+    configurationFromFile(the configFile?, ss.configuration)
+  
+  -- Rules are indexed
+  allRulesIndexed(ss.file.psystem.rules, ss.ruleSets)
+  
+  parserState' = none
+end
+
+/*
+ * SelectRules: Rule selection phase
+ * 
+ * Selects rules to apply in the current step using maximal parallelism.
+ * 
+ * Preconditions:
+ * - System is in SIMULATING mode
+ * - Simulation is not finished
+ * 
+ * Postconditions:
+ * - Rules are selected for each membrane
+ * - Priority levels are respected
+ * - Semantics constraints are satisfied
+ * - Maximum parallelism is achieved
+ */
+schema SelectRules
+  ΔSystemState
+where
+  -- Preconditions
+  mode = SIMULATING
+  let ss = the simulatorState in
+  ss.finished = FALSE
+  
+  -- Postconditions
+  mode' = SIMULATING
+  
+  let ss = the simulatorState in
+  let ss' = the simulatorState' in
+  
+  -- Configuration unchanged
+  ss'.configuration = ss.configuration
+  
+  -- Rules selected
+  ∀ sr: ss'.selectedRules • 
+    let m = ss'.configuration.membranes(sr.membraneId) in
+    let rules = ss'.ruleSets.rules(m.label)(m.charge.charge) in
+    sr.ruleIndex ∈ dom rules ∧
+    canApplyRule(m, rules(sr.ruleIndex), sr.applications, ss'.configuration)
+  
+  -- Priority respected
+  ∀ sr: ss'.selectedRules • 
+    let m = ss'.configuration.membranes(sr.membraneId) in
+    let rule = getRuleByIndex(ss'.ruleSets, m, sr.ruleIndex) in
+    priority(rule) ≤ m.priorityLevel
+  
+  -- Maximal parallelism (if not randomized)
+  ss.randomized = FALSE ⇒ 
+    ∀ sr: ss'.selectedRules • 
+      sr.applications = maxApplications(sr, ss'.configuration)
+  
+  -- Semantics satisfied
+  ∀ sr: ss'.selectedRules • 
+    let m = ss'.configuration.membranes(sr.membraneId) in
+    let rule = getRuleByIndex(ss'.ruleSets, m, sr.ruleIndex) in
+    semanticsSatisfied(m.semantics, rule, sr.applications)
+end
+
+/*
+ * ExecuteRules: Rule execution phase
+ * 
+ * Executes all selected rules, updating the configuration.
+ * 
+ * Preconditions:
+ * - System is in SIMULATING mode
+ * - Rules have been selected
+ * 
+ * Postconditions:
+ * - Objects are consumed and produced
+ * - Membranes are modified (charge, division, dissolution)
+ * - Time is incremented
+ * - Selected rules are cleared
+ */
+schema ExecuteRules
+  ΔSystemState
+where
+  -- Preconditions
+  mode = SIMULATING
+  let ss = the simulatorState in
+  ss.selectedRules ≠ ∅
+  
+  -- Postconditions
+  mode' = SIMULATING
+  
+  let ss = the simulatorState in
+  let ss' = the simulatorState' in
+  
+  -- Time increments
+  ss'.configuration.time = ss.configuration.time + 1
+  
+  -- Selected rules cleared
+  ss'.selectedRules = ∅
+  
+  -- Objects consumed
+  ∀ sr: ss.selectedRules • 
+    objectsConsumed(sr, ss.configuration, ss'.configuration)
+  
+  -- Objects produced
+  ∀ sr: ss.selectedRules • 
+    objectsProduced(sr, ss.configuration, ss'.configuration)
+  
+  -- Membranes divided if needed
+  ∀ sr: ss.selectedRules • 
+    let rule = getRuleBySelection(sr, ss.ruleSets, ss.configuration) in
+    #rule.rhr.producedMembranes > 1 ⇒ 
+      membraneDivided(sr.membraneId, rule, ss.configuration, ss'.configuration)
+  
+  -- Membranes dissolved if needed
+  ∀ sr: ss.selectedRules • 
+    let rule = getRuleBySelection(sr, ss.ruleSets, ss.configuration) in
+    markedForDissolution(sr.membraneId, rule) ⇒ 
+      membraneDissolved(sr.membraneId, ss.configuration, ss'.configuration)
+end
+
+/*
+ * SimulationStep: Complete simulation step
+ * 
+ * Performs one complete simulation step (select + execute).
+ * 
+ * Preconditions:
+ * - System is in SIMULATING mode
+ * - Simulation is not finished
+ * 
+ * Postconditions:
+ * - Rules are selected and executed
+ * - Configuration is updated
+ * - Finished flag may be set
+ */
+schema SimulationStep
+  ΔSystemState
+where
+  -- Preconditions
+  mode = SIMULATING
+  let ss = the simulatorState in
+  ss.finished = FALSE
+  
+  -- Composition of SelectRules and ExecuteRules
+  ∃ SystemState'' • 
+    SelectRules ∧ 
+    [SystemState' / SystemState''] ∧ 
+    [SystemState'' / SystemState] ∧ 
+    ExecuteRules
+  
+  -- Postconditions
+  mode' = SIMULATING
+  
+  let ss = the simulatorState in
+  let ss' = the simulatorState' in
+  
+  -- Time advanced
+  ss'.configuration.time = ss.configuration.time + 1
+  
+  -- Finished check
+  ss'.finished = TRUE ⇔ 
+    (ss.maxSteps > 0 ∧ 
+     ss'.configuration.time - ss.initialTime ≥ ss.maxSteps) ∨
+    ss'.selectedRules = ∅
+end
+
+/*
+ * RunSimulation: Run complete simulation
+ * 
+ * Runs simulation until completion or max steps reached.
+ * 
+ * Preconditions:
+ * - System is in SIMULATING mode
+ * - Simulation is initialized
+ * 
+ * Postconditions:
+ * - Simulation runs to completion
+ * - Final configuration is available
+ * - System returns to IDLE mode
+ */
+schema RunSimulation
+  ΔSystemState
+  finalConfig!: Configuration
+where
+  -- Preconditions
+  mode = SIMULATING
+  
+  -- Multiple simulation steps
+  ∃ states: seq SystemState • 
+    #states > 0 ∧
+    states(1) = θSystemState ∧
+    states(#states) = θSystemState' ∧
+    ∀ i: 1..(#states - 1) • 
+      SimulationStep[states(i) / SystemState, states(i+1) / SystemState']
+  
+  -- Postconditions
+  mode' = IDLE
+  let ss = the simulatorState in
+  ss.finished = TRUE
+  finalConfig! = ss.configuration
+  
+  simulatorState' = none
+end
+
+/* ============================================================================
+ * SECTION 3: MEMBRANE OPERATIONS
+ * ============================================================================ */
+
+/*
+ * CopyMembrane: Duplicate a membrane
+ * 
+ * Creates a copy of a membrane with all its contents and children.
+ * Used in membrane division.
+ * 
+ * Preconditions:
+ * - Source membrane exists
+ * - Source membrane is not dissolved
+ * 
+ * Postconditions:
+ * - New membrane is created
+ * - Contents are copied
+ * - Structure is preserved
+ * - New membrane has valid parent
+ */
+schema CopyMembrane
+  ΔConfiguration
+  sourceMembId?: ℕ
+  newMembId!: ℕ
+where
+  -- Preconditions
+  sourceMembId? ∈ dom membranes
+  membranes(sourceMembId?).parent ≠ -2
+  
+  -- Postconditions
+  newMembId! ∈ dom membranes'
+  newMembId! ∉ dom membranes
+  
+  let source = membranes(sourceMembId?) in
+  let copy = membranes'(newMembId!) in
+  
+  -- Properties copied
+  copy.label = source.label ∧
+  copy.charge = source.charge ∧
+  copy.multiset = source.multiset ∧
+  copy.parent = source.parent
+  
+  -- Children copied recursively
+  #copy.children = #source.children ∧
+  ∀ i: dom source.children • 
+    ∃ childCopy: ℕ • 
+      childCopy ∈ ran copy.children ∧
+      isomorphicMembrane(membranes'(childCopy), membranes(source.children(i)))
+end
+
+/*
+ * DissolveMembrane: Dissolve a membrane
+ * 
+ * Removes a membrane and moves its contents to parent.
+ * 
+ * Preconditions:
+ * - Membrane exists
+ * - Membrane is marked for dissolution
+ * 
+ * Postconditions:
+ * - Membrane is removed
+ * - Contents moved to parent
+ * - Children become siblings
+ * - Index marked as free
+ */
+schema DissolveMembrane
+  ΔConfiguration
+  membId?: ℕ
+where
+  -- Preconditions
+  membId? ∈ dom membranes
+  membranes(membId?).multiset.objects("@d").multiplicity > 0 ∨
+  markedForDissolution(membId?)
+  
+  -- Postconditions
+  let source = membranes(membId?) in
+  
+  -- Membrane marked as free
+  membranes'(membId?).parent = -2
+  membranes'(membId?).multiset.objects = ∅
+  membranes'(membId?).children = ⟨⟩
+  
+  -- Contents moved to parent
+  source.parent ≠ -1 ⇒ 
+    let parent = membranes(source.parent) in
+    let parent' = membranes'(source.parent) in
+    ∀ obj: dom source.multiset.objects • 
+      parent'.multiset.objects(obj).multiplicity = 
+        parent.multiset.objects(obj).multiplicity + 
+        source.multiset.objects(obj).multiplicity
+  
+  -- Contents moved to environment
+  source.parent = -1 ⇒ 
+    ∀ obj: dom source.multiset.objects • 
+      environment'.objects(obj).multiplicity = 
+        environment.objects(obj).multiplicity + 
+        source.multiset.objects(obj).multiplicity
+  
+  -- Children reparented
+  source.parent ≠ -1 ⇒ 
+    ∀ child: ran source.children • 
+      membranes'(child).parent = source.parent ∧
+      child ∈ ran membranes'(source.parent).children
+end
+
+/*
+ * ChangeCharge: Modify membrane charge
+ * 
+ * Changes the electrical charge of a membrane.
+ * 
+ * Preconditions:
+ * - Membrane exists
+ * - New charge is valid
+ * 
+ * Postconditions:
+ * - Charge is updated
+ * - Other properties unchanged
+ */
+schema ChangeCharge
+  ΔConfiguration
+  membId?: ℕ
+  newCharge?: ℤ
+where
+  -- Preconditions
+  membId? ∈ dom membranes
+  newCharge? ∈ {-1, 0, 1}
+  
+  -- Postconditions
+  membranes'(membId?).charge.charge = newCharge?
+  
+  -- Everything else unchanged
+  membranes'(membId?).label = membranes(membId?).label
+  membranes'(membId?).multiset = membranes(membId?).multiset
+  membranes'(membId?).parent = membranes(membId?).parent
+  membranes'(membId?).children = membranes(membId?).children
+end
+
+/* ============================================================================
+ * SECTION 4: MULTISET OPERATIONS
+ * ============================================================================ */
+
+/*
+ * AddObjects: Add objects to multiset
+ * 
+ * Adds a multiset of objects to an existing multiset.
+ * 
+ * Preconditions:
+ * - Objects to add are well-formed
+ * - Multiplicities are positive
+ * 
+ * Postconditions:
+ * - Multiplicities are summed
+ * - New objects are added
+ */
+schema AddObjects
+  ΔMultiset
+  toAdd?: Multiset
+  factor?: ℕ₁
+where
+  -- Preconditions
+  factor? > 0
+  ∀ obj: dom toAdd?.objects • 
+    toAdd?.objects(obj).multiplicity > 0
+  
+  -- Postconditions
+  ∀ obj: dom toAdd?.objects • 
+    objects'(obj).multiplicity = 
+      (obj ∈ dom objects ⇒ objects(obj).multiplicity | 0) +
+      toAdd?.objects(obj).multiplicity * factor?
+  
+  -- Other objects unchanged
+  ∀ obj: dom objects • 
+    obj ∉ dom toAdd?.objects ⇒ 
+      objects'(obj) = objects(obj)
+end
+
+/*
+ * RemoveObjects: Remove objects from multiset
+ * 
+ * Removes a multiset of objects from an existing multiset.
+ * 
+ * Preconditions:
+ * - Objects to remove exist in sufficient quantity
+ * - Multiplicities are positive
+ * 
+ * Postconditions:
+ * - Multiplicities are subtracted
+ * - Objects with zero multiplicity are removed
+ */
+schema RemoveObjects
+  ΔMultiset
+  toRemove?: Multiset
+  factor?: ℕ₁
+where
+  -- Preconditions
+  factor? > 0
+  ∀ obj: dom toRemove?.objects • 
+    obj ∈ dom objects ∧
+    objects(obj).multiplicity ≥ 
+      toRemove?.objects(obj).multiplicity * factor?
+  
+  -- Postconditions
+  ∀ obj: dom toRemove?.objects • 
+    let newMult = objects(obj).multiplicity - 
+                  toRemove?.objects(obj).multiplicity * factor? in
+    newMult > 0 ⇒ objects'(obj).multiplicity = newMult
+    newMult = 0 ⇒ obj ∉ dom objects'
+  
+  -- Other objects unchanged
+  ∀ obj: dom objects • 
+    obj ∉ dom toRemove?.objects ⇒ 
+      objects'(obj) = objects(obj)
+end
+
+/*
+ * CountMultiset: Count how many times a multiset fits
+ * 
+ * Calculates the maximum number of times a multiset can be
+ * subtracted from another multiset.
+ * 
+ * Preconditions:
+ * - Both multisets are well-formed
+ * 
+ * Postconditions:
+ * - Count is returned
+ * - Count is maximum possible
+ */
+schema CountMultiset
+  ΞMultiset
+  pattern?: Multiset
+  count!: ℕ
+where
+  -- Empty pattern matches infinitely
+  pattern?.objects = ∅ ⇒ count! = ∞
+  
+  -- Non-empty pattern
+  pattern?.objects ≠ ∅ ⇒ 
+    count! = min({ objects(obj).multiplicity div 
+                   pattern?.objects(obj).multiplicity | 
+                   obj: dom pattern?.objects ∧ obj ∈ dom objects })
+  
+  -- If any object missing, count is 0
+  (∃ obj: dom pattern?.objects • obj ∉ dom objects) ⇒ 
+    count! = 0
+end
+
+/* ============================================================================
+ * SECTION 5: HELPER PREDICATES AND FUNCTIONS
+ * ============================================================================ */
+
+-- Predicates used in operation specifications
+
+descendant: Node × Node → 𝔹
+circularInclude: seq String → 𝔹
+getModuleName: Node → String
+inOriginalTree: RangeSpec × Node → 𝔹
+allInstancesGenerated: RangeSpec × Node → 𝔹
+structureIsValid: ParserState → 𝔹
+rulesAreValid: ParserState → 𝔹
+semanticsAreConsistent: ParserState → 𝔹
+fileWritten: String × String → 𝔹
+configurationFromStructure: Membrane × Configuration → 𝔹
+configurationFromFile: String × Configuration → 𝔹
+allRulesIndexed: ℙ Rule × RuleSet → 𝔹
+canApplyRule: CMembrane × Rule × ℕ × Configuration → 𝔹
+getRuleByIndex: RuleSet × CMembrane × ℕ → Rule
+maxApplications: SelectedRule × Configuration → ℕ
+semanticsSatisfied: Semantics × Rule × ℕ → 𝔹
+objectsConsumed: SelectedRule × Configuration × Configuration → 𝔹
+objectsProduced: SelectedRule × Configuration × Configuration → 𝔹
+membraneDivided: ℕ × Rule × Configuration × Configuration → 𝔹
+markedForDissolution: ℕ × Rule → 𝔹
+membraneDissolved: ℕ × Configuration × Configuration → 𝔹
+getRuleBySelection: SelectedRule × RuleSet × Configuration → Rule
+isomorphicMembrane: CMembrane × CMembrane → 𝔹
+
+/* ============================================================================
+ * END OF OPERATIONS SPECIFICATION
+ * ============================================================================ */
