@@ -1,0 +1,48 @@
+/*
+ * Matrix Multiplication
+ * 
+ * Multiplies two matrices using parallel computation in membranes.
+ * 
+ * Concept: Parallel computation using membrane structure
+ * Difficulty: Advanced
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def matrixMultiply(n, m, p)
+{
+    // Multiply matrix A (n×m) by matrix B (m×p) to get C (n×p)
+    @mu = [ ]'1;
+    
+    // Matrix A: 2×2
+    @ms(1) = a{0,0,1}, a{0,1,2},
+             a{1,0,3}, a{1,1,4};
+    
+    // Matrix B: 2×2
+    @ms(1) += b{0,0,5}, b{0,1,6},
+              b{1,0,7}, b{1,1,8};
+    
+    // Initialize result
+    @ms(1) += c{i,j,0} : 0 <= i < n, 0 <= j < p;
+    
+    // Compute C[i][j] = sum(A[i][k] * B[k][j]) for all k
+    [a{i,k,av}, b{k,j,bv}, c{i,j,cv}]'1 --> 
+        [a{i,k,av}, b{k,j,bv}, c{i,j,cv+av*bv}]'1
+        : 0 <= i < n, 0 <= j < p, 0 <= k < m;
+    
+    // Mark computation complete
+    [c{i,j,val}]'1 --> [result{i,j,val}]'1
+        : 0 <= i < n, 0 <= j < p;
+}
+
+def main()
+{
+    // Multiply 2×2 matrices
+    // A = [[1,2], [3,4]]
+    // B = [[5,6], [7,8]]
+    // C = [[19,22], [43,50]]
+    call matrixMultiply(2, 2, 2);
+}

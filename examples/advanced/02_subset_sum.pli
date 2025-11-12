@@ -1,0 +1,46 @@
+/*
+ * Subset Sum Problem
+ * 
+ * Determines if there exists a subset of given numbers that sums to target.
+ * This is an NP-complete problem.
+ * 
+ * Concept: Non-deterministic solution using membrane division
+ * Difficulty: Advanced
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def subsetSum(n, target)
+{
+    @mu = [[]'2]'1;
+    
+    // Initialize with target sum and elements to process
+    @ms(2) = sum{0}, target{target}, process{0};
+    
+    // Example set: {3, 5, 7, 11, 13}
+    @ms(2) += elem{0,3}, elem{1,5}, elem{2,7}, elem{3,11}, elem{4,13};
+    
+    // For each element: create two branches (include or exclude)
+    [process{i}, elem{i,val}, sum{s}]'2 --> 
+        [process{i+1}, elem{i,val}, sum{s+val}]'2    // Include
+        [process{i+1}, elem{i,val}, sum{s}]'2        // Exclude
+        : 0 <= i < n;
+    
+    // Check if sum equals target
+    [process{n}, sum{s}, target{t}]'2 --> [success]'2 : s == t;
+    
+    // Discard non-matching solutions
+    [process{n}, sum{s}, target{t}]'2 --> [fail]'2 : s != t;
+    
+    // Membranes with 'success' contain valid subsets
+}
+
+def main()
+{
+    // Find subset that sums to 23
+    // Solution exists: {5, 7, 11}
+    call subsetSum(5, 23);
+}

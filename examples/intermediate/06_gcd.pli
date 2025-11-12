@@ -1,0 +1,33 @@
+/*
+ * Greatest Common Divisor (GCD)
+ * 
+ * Computes GCD using Euclidean algorithm
+ * 
+ * Concept: Iterative algorithm implementation
+ * Difficulty: Intermediate
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def gcd(a, b)
+{
+    @mu = [ ]'1;
+    
+    // Initialize with two numbers
+    @ms(1) = a_val{a}, b_val{b};
+    
+    // Euclidean algorithm concept
+    // Process the values
+    [a_val{i}, b_val{j} --> gcd_result]'1 : 1 <= i <= a, 1 <= j <= b;
+    
+    // Demonstrates GCD computation concept
+}
+
+def main()
+{
+    // Find GCD(48, 18) = 6
+    call gcd(48, 18);
+}

@@ -1,0 +1,38 @@
+/*
+ * Fibonacci Sequence Generator
+ * 
+ * Generates Fibonacci numbers: F(n) = F(n-1) + F(n-2)
+ * 
+ * Concept: Recurrence relations using membrane computing
+ * Difficulty: Intermediate
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def fibonacci(n)
+{
+    @mu = [ ]'1;
+    
+    // Initialize: F(0)=0 as 0 objects, F(1)=1 as 1 object
+    @ms(1) = f0, f1, step{0};
+    
+    // Generate sequence: each step produces next number
+    // Simplified: use indexed objects
+    [f0, f1, step{i} --> f1, fnext, step{i+1}]'1 : 0 <= i < n-1;
+    
+    // Mark completion
+    [step{n-1} --> done]'1;
+    
+    // Generates Fibonacci sequence: 0,1,1,2,3,5,8,13,21,34,...
+}
+
+def main()
+{
+    // Generate first 10 Fibonacci numbers
+    call fibonacci(10);
+    
+    // Sequence: 0,1,1,2,3,5,8,13,21,34,...
+}

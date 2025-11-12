@@ -1,0 +1,63 @@
+/*
+ * Bin Packing Problem
+ * 
+ * Packs items of different sizes into minimum number of bins
+ * with fixed capacity. NP-hard optimization problem.
+ * 
+ * Concept: Non-deterministic bin assignment with capacity constraints
+ * Difficulty: Expert
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def binPacking(numItems, binCapacity, maxBins)
+{
+    @mu = [[]'2]'1;
+    
+    // Start with first item
+    @ms(2) = item{0}, bins_used{0};
+    
+    // Item sizes
+    @ms(2) += size{0,7}, size{1,5}, size{2,8}, 
+              size{3,3}, size{4,4}, size{5,6};
+    
+    // Track bin loads
+    @ms(2) += load{b,0} : 0 <= b < maxBins;
+    
+    // For each item: try placing in each bin
+    [item{i}, size{i,s}, load{b,l}, bins_used{mask}]'2 -->
+        {[item{i+1}, size{i,s}, assigned{i,b}, load{b,l+s}, 
+          bins_used{mask|(1<<b)}]'2
+         : 0 <= b < maxBins, l + s <= binCapacity};
+    
+    // All items assigned
+    [item{numItems}, bins_used{mask}]'2 --> 
+        [packing_complete, bins_count{count_bits(mask)}]'2;
+    
+    // Find minimum bins needed
+    [bins_count{n1}]'2, [bins_count{n2}]'2 --> [bins_count{n1}]'2
+        : n1 <= n2;
+    
+    // Applications: resource allocation, load balancing
+}
+
+def count_bits(n)
+{
+    let count = 0;
+    while (n > 0) {
+        count += n % 2;
+        n = n / 2;
+    }
+    return count;
+}
+
+def main()
+{
+    // Pack 6 items into bins of capacity 10
+    call binPacking(6, 10, 6);
+    // Items: [7,5,8,3,4,6]
+    // Possible solution: Bin1:[8], Bin2:[7,3], Bin3:[6,4], Bin4:[5]
+}

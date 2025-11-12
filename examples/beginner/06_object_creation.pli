@@ -1,0 +1,31 @@
+/*
+ * Object Creation and Destruction
+ * 
+ * Demonstrates creating and destroying objects
+ * 
+ * Concept: Rules can create multiple objects or destroy them (empty multiset)
+ * Difficulty: Beginner
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def main()
+{
+    // Single membrane
+    @mu = [ ]'1;
+    
+    // Start with a generator object and some matter
+    @ms(1) = generator, matter{5};
+    
+    // Generator creates new objects (duplication)
+    [generator --> generator, particle]'1;
+    
+    // Matter can be consumed (destroyed)
+    [matter --> #]'1;
+    
+    // # represents the empty multiset (nothing)
+    // Particles accumulate while matter disappears
+}

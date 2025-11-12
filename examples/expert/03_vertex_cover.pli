@@ -1,0 +1,53 @@
+/*
+ * Vertex Cover Problem
+ * 
+ * Finds the minimum set of vertices such that each edge has at least
+ * one endpoint in the set. NP-complete decision problem.
+ * 
+ * Concept: Generate all subsets, check coverage, minimize size
+ * Difficulty: Expert
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def vertexCover(numVertices, k)
+{
+    @mu = [[]'2]'1;
+    
+    // Start with no vertices selected
+    @ms(2) = vertex{0}, selected{0}, count{0};
+    
+    // Define graph edges
+    @ms(2) += edge{0,1}, edge{0,2}, edge{1,2},
+              edge{1,3}, edge{2,4}, edge{3,4};
+    
+    // For each vertex: include or exclude
+    [vertex{v}, selected{mask}, count{cnt}]'2 -->
+        [vertex{v+1}, selected{mask|(1<<v)}, count{cnt+1}]'2  // Include
+        [vertex{v+1}, selected{mask}, count{cnt}]'2           // Exclude
+        : 0 <= v < numVertices;
+    
+    // Check if all edges are covered
+    // Edge (u,v) is covered if u or v is in selected set
+    [edge{u,v}, selected{mask}]'2 --> [covered{u,v}]'2
+        : (mask & (1<<u)) != 0 || (mask & (1<<v)) != 0;
+    
+    // Valid cover if all edges covered and size <= k
+    [vertex{numVertices}, count{cnt}]'2 --> [valid_cover{cnt}]'2
+        : cnt <= k;
+    
+    // Find minimum size among valid covers
+    [valid_cover{c1}]'2, [valid_cover{c2}]'2 --> [valid_cover{c1}]'2
+        : c1 <= c2;
+    
+    // Remaining membrane has minimum vertex cover
+}
+
+def main()
+{
+    // Find vertex cover of size <= 3 for 5-vertex graph
+    call vertexCover(5, 3);
+}

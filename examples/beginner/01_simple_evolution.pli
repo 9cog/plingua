@@ -1,0 +1,28 @@
+/*
+ * Simple Object Evolution
+ * 
+ * This is the simplest possible P-Lingua program that demonstrates
+ * basic object evolution within a membrane.
+ * 
+ * Concept: Objects can evolve (transform) according to rules
+ * Difficulty: Beginner
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def main()
+{
+    // Create a single membrane labeled '1'
+    @mu = [ ]'1;
+    
+    // Initialize with 5 'a' objects
+    @ms(1) = a{5};
+    
+    // Evolution rule: 'a' transforms into 'b'
+    [a --> b]'1;
+    
+    // After one step, all 'a' objects become 'b' objects
+}

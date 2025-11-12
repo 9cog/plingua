@@ -1,0 +1,28 @@
+/*
+ * Simple Counter
+ * 
+ * Demonstrates a basic counting mechanism using indexed objects
+ * 
+ * Concept: Objects with indices can represent sequential values
+ * Difficulty: Beginner
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def main()
+{
+    // Single membrane
+    @mu = [ ]'1;
+    
+    // Initialize counter at 0
+    @ms(1) = counter{0};
+    
+    // Increment rules: counter{i} -> counter{i+1}
+    [counter{i} --> counter{i+1}]'1 : 0 <= i <= 9;
+    
+    // The counter will increment from 0 to 10 over multiple steps
+    // Each step increases the counter by 1
+}

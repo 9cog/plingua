@@ -1,0 +1,81 @@
+/*
+ * Stochastic Process Modeling
+ * 
+ * Models stochastic chemical reactions and biological processes
+ * using probabilistic rules in P-systems.
+ * 
+ * Concept: Gillespie algorithm, chemical kinetics, probabilistic evolution
+ * Difficulty: Experimental
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<probabilistic>
+@include "../pdp_model.pli"
+
+def chemicalReactions()
+{
+    @mu = [ ]'reactor;
+    
+    // Initial molecular concentrations
+    @ms(reactor) = molecule_A{100}, molecule_B{50}, 
+                   enzyme{10}, time{0};
+    
+    // Reaction 1: A + B -> C (bimolecular)
+    // Rate proportional to [A]*[B]
+    [molecule_A, molecule_B --> molecule_C]'reactor 
+        :: probability(0.001);
+    
+    // Reaction 2: C -> A + B (decomposition)
+    [molecule_C --> molecule_A, molecule_B]'reactor 
+        :: probability(0.0005);
+    
+    // Reaction 3: A + enzyme -> A_bound (binding)
+    [molecule_A, enzyme --> complex_A_enzyme]'reactor 
+        :: probability(0.01);
+    
+    // Reaction 4: complex -> A + enzyme (unbinding)
+    [complex_A_enzyme --> molecule_A, enzyme]'reactor 
+        :: probability(0.005);
+    
+    // Reaction 5: A + enzyme -> product (catalysis)
+    [molecule_A, enzyme --> product, enzyme]'reactor 
+        :: probability(0.02);
+    
+    // Diffusion: molecules move between compartments
+    molecule_A [ ]'compartment --> [molecule_A]'compartment
+        :: probability(0.1);
+    
+    // Time progression (stochastic)
+    [time{t}]'reactor --> [time{t+dt}]'reactor
+        :: probability(1.0);
+}
+
+def lotkaVolterra()
+{
+    // Predator-prey dynamics (Lotka-Volterra equations)
+    @mu = [ ]'ecosystem;
+    
+    // Initial populations
+    @ms(ecosystem) = prey{1000}, predator{50};
+    
+    // Prey reproduction
+    [prey --> prey{2}]'ecosystem :: probability(0.1);
+    
+    // Predation
+    [prey, predator --> predator{2}]'ecosystem :: probability(0.001);
+    
+    // Predator death
+    [predator --> #]'ecosystem :: probability(0.05);
+    
+    // Oscillating populations emerge naturally
+}
+
+def main()
+{
+    // Simulate chemical reaction network
+    call chemicalReactions();
+    
+    // Simulate ecological system
+    call lotkaVolterra();
+}

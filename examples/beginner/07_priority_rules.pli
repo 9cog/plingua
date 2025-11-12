@@ -1,0 +1,33 @@
+/*
+ * Priority Rules
+ * 
+ * Demonstrates rule priorities - some rules execute before others
+ * 
+ * Concept: Rules can have priorities to control execution order
+ * Difficulty: Beginner
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def main()
+{
+    // Single membrane
+    @mu = [ ]'1;
+    
+    // Mixed objects
+    @ms(1) = a{3}, b{2};
+    
+    // Priority 1 (higher priority executes first)
+    (1) [a --> x]'1;
+    
+    // Priority 2 (lower priority executes second)
+    (2) [b --> y]'1;
+    
+    // Priority 3 (lowest priority executes last)
+    (3) [x --> z]'1;
+    
+    // Execution order: first all 'a'->'x', then 'b'->'y', then 'x'->'z'
+}

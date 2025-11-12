@@ -1,0 +1,53 @@
+/*
+ * Independent Set Problem
+ * 
+ * Finds the largest set of vertices with no edges between them.
+ * Complement of the clique problem; also NP-complete.
+ * 
+ * Concept: Generate subsets, verify no edges, maximize size
+ * Difficulty: Expert
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def maxIndependentSet(numVertices)
+{
+    @mu = [[]'2]'1;
+    
+    // Start with empty independent set
+    @ms(2) = vertex{0}, indset{0}, size{0};
+    
+    // Define graph edges
+    @ms(2) += edge{0,1}, edge{0,3},
+              edge{1,2}, edge{1,4},
+              edge{2,3}, edge{2,4},
+              edge{3,4};
+    
+    // For each vertex: include or exclude
+    [vertex{v}, indset{mask}, size{s}]'2 -->
+        [vertex{v+1}, indset{mask|(1<<v)}, size{s+1}]'2  // Include
+        [vertex{v+1}, indset{mask}, size{s}]'2           // Exclude
+        : 0 <= v < numVertices;
+    
+    // Check independence: no edge between any two vertices in set
+    [edge{u,v}, indset{mask}]'2 --> [not_independent]'2
+        : (mask & (1<<u)) != 0 && (mask & (1<<v)) != 0;
+    
+    // Valid independent sets
+    [vertex{numVertices}, indset{mask}, size{s}]'2 --> [independent{s}]'2;
+    
+    // Find maximum size
+    [independent{s1}]'2, [independent{s2}]'2 --> [independent{s1}]'2
+        : s1 >= s2;
+    
+    // Applications: scheduling, resource allocation
+}
+
+def main()
+{
+    // Find maximum independent set in 5-vertex graph
+    call maxIndependentSet(5);
+}

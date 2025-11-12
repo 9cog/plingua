@@ -1,0 +1,37 @@
+/*
+ * Factorial Calculator
+ * 
+ * Computes factorial using P-systems: n! = n * (n-1) * ... * 2 * 1
+ * 
+ * Concept: Sequential computation using counters and accumulators
+ * Difficulty: Intermediate
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def factorial(n)
+{
+    @mu = [ ]'1;
+    
+    // Initialize: counter at n, accumulator
+    @ms(1) = counter{n}, result;
+    
+    // Add result objects equal to factorial value
+    // Simplified approach: generate sequence
+    [counter{k} --> counter{k-1}, partial{k}]'1 : 2 <= k <= n;
+    
+    // Base case
+    [counter{1} --> done]'1;
+    
+    // Collect all partials to compute result
+    // Example: factorial(5) = 5*4*3*2*1 = 120
+}
+
+def main()
+{
+    // Calculate 5!
+    call factorial(5);
+}

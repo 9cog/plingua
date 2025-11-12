@@ -1,0 +1,59 @@
+/*
+ * Evolutionary Algorithm Using Membrane Division
+ * 
+ * Implements a genetic algorithm where membranes represent individuals,
+ * division represents reproduction, and dissolution represents death.
+ * 
+ * Concept: Evolutionary computation, population-based search
+ * Difficulty: Experimental
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def geneticAlgorithm(popSize, genomeLength, generations)
+{
+    @mu = [[]'population]'environment;
+    
+    // Initialize population with random genomes
+    @ms(population) = individual{0}, genome{0,random_bits(genomeLength)},
+                      generation{0};
+    
+    // Fitness evaluation: count ones in genome (OneMax problem)
+    [genome{id,bits}]'population --> 
+        [genome{id,bits}, fitness{id,count_ones(bits)}]'population;
+    
+    // Selection: higher fitness individuals divide more
+    [individual{id}, fitness{id,f}, generation{g}]'population -->
+        [individual{2*id}, genome{2*id,mutate(genome{id})}, generation{g}]'population
+        [individual{2*id+1}, genome{2*id+1,crossover(genome{id})}, generation{g}]'population
+        : f > selection_threshold;
+    
+    // Low fitness individuals die (dissolve)
+    [individual{id}, fitness{id,f}]'population --> #
+        : f < death_threshold;
+    
+    // Mutation: randomly flip bits
+    [genome{id,bits}]'population --> 
+        [genome{id,flip_random_bit(bits)}]'population
+        :: probability(0.01);
+    
+    // Crossover: combine genomes from two parents
+    [genome{id1,bits1}, genome{id2,bits2}]'population -->
+        [genome{new_id,combine(bits1,bits2)}]'population
+        :: probability(0.7);
+    
+    // Next generation
+    [generation{g}]'population --> [generation{g+1}]'population
+        : g < generations;
+    
+    // Convergence: population evolves toward optimal solution
+}
+
+def main()
+{
+    // Evolve population of 20 individuals for 50 generations
+    call geneticAlgorithm(20, 32, 50);
+}

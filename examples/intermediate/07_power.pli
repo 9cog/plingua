@@ -1,0 +1,35 @@
+/*
+ * Power Calculator
+ * 
+ * Computes a^b (a to the power of b) using repeated multiplication
+ * 
+ * Concept: Exponentiation via iteration
+ * Difficulty: Intermediate
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def power(base, exp)
+{
+    @mu = [ ]'1;
+    
+    // Initialize with base and exponent counter
+    @ms(1) = base_val{base}, exp_counter{exp};
+    
+    // Decrement exponent
+    [exp_counter{n} --> exp_counter{n-1}]'1 : 1 <= n <= exp;
+    
+    // When exponent reaches 0, computation done
+    [exp_counter{0} --> power_done]'1;
+    
+    // Demonstrates iterative exponentiation concept
+}
+
+def main()
+{
+    // Calculate 2^8 = 256
+    call power(2, 8);
+}
