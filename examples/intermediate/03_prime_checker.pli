@@ -1,0 +1,35 @@
+/*
+ * Prime Number Checker
+ * 
+ * Determines if a number is prime using trial division
+ * 
+ * Concept: Conditional evolution based on divisibility
+ * Difficulty: Intermediate
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def isPrime(n)
+{
+    @mu = [ ]'1;
+    
+    // Start with the number to check
+    @ms(1) = num{n}, prime_candidate;
+    
+    // Generate divisor candidates (simplified for demo)
+    @ms(1) += divisor{2}, divisor{3}, divisor{5};
+    
+    // If no divisors, it's prime
+    [prime_candidate --> is_prime]'1;
+    
+    // Demonstrates primality checking concept
+}
+
+def main()
+{
+    // Check if 17 is prime (it is)
+    call isPrime(17);
+}

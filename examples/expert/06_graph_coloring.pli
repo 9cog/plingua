@@ -1,0 +1,63 @@
+/*
+ * Graph Coloring Problem
+ * 
+ * Assigns colors to vertices such that no adjacent vertices share
+ * the same color. Finds minimum number of colors needed (chromatic number).
+ * 
+ * Concept: Non-deterministic color assignment with constraint checking
+ * Difficulty: Expert
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def graphColoring(numVertices, maxColors)
+{
+    @mu = [[]'2]'1;
+    
+    // Start coloring from vertex 0
+    @ms(2) = vertex{0}, colors_used{0};
+    
+    // Define graph edges
+    @ms(2) += edge{0,1}, edge{0,2}, edge{0,3},
+              edge{1,2}, edge{1,4},
+              edge{2,3}, edge{2,4},
+              edge{3,4};
+    
+    // For each vertex: try each color
+    [vertex{v}, colors_used{mask}]'2 -->
+        {[vertex{v+1}, color{v,c}, colors_used{mask|(1<<c)}]'2 
+         : 0 <= c < maxColors}
+        : 0 <= v < numVertices;
+    
+    // Check constraint: adjacent vertices have different colors
+    [edge{u,v}, color{u,c}, color{v,c}]'2 --> [invalid_coloring]'2;
+    
+    // Valid coloring found
+    [vertex{numVertices}, colors_used{mask}]'2 --> 
+        [valid_coloring, chromatic_number{count_bits(mask)}]'2;
+    
+    // Find minimum number of colors
+    [chromatic_number{n1}]'2, [chromatic_number{n2}]'2 --> 
+        [chromatic_number{n1}]'2
+        : n1 <= n2;
+}
+
+// Helper function to count set bits
+def count_bits(n)
+{
+    let count = 0;
+    while (n > 0) {
+        count += n % 2;
+        n = n / 2;
+    }
+    return count;
+}
+
+def main()
+{
+    // Find chromatic number of 5-vertex graph with at most 4 colors
+    call graphColoring(5, 4);
+}

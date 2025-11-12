@@ -1,0 +1,49 @@
+/*
+ * N-Queens Problem Solver
+ * 
+ * Finds all solutions to the N-Queens problem: place N queens on an NxN
+ * chessboard such that no two queens attack each other.
+ * 
+ * Concept: Backtracking search using membrane division
+ * Difficulty: Advanced
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def nqueens(n)
+{
+    @mu = [[]'2]'1;
+    
+    // Start with empty board, column 0
+    @ms(2) = board, col{0};
+    
+    // For each column, try placing queen in each row
+    // Division creates one membrane per possibility
+    [col{c}, board]'2 --> [col{c+1}, board, queen{c,r}]'2 [col{c+1}, board]'2
+        : 0 <= c < n, 0 <= r < n;
+    
+    // Check constraints: no two queens on same row
+    [queen{c1,r}, queen{c2,r}]'2 --> [invalid]'2
+        : c1 < c2;
+    
+    // Check constraints: no two queens on same diagonal
+    [queen{c1,r1}, queen{c2,r2}]'2 --> [invalid]'2
+        : c1 < c2, r1-c1 == r2-c2;
+    
+    [queen{c1,r1}, queen{c2,r2}]'2 --> [invalid]'2
+        : c1 < c2, r1+c1 == r2+c2;
+    
+    // Valid solution when all queens placed
+    [col{n}, board]'2 --> [solution]'2;
+    
+    // Membranes with 'solution' contain valid queen placements
+}
+
+def main()
+{
+    // Solve 8-Queens problem
+    call nqueens(8);
+}

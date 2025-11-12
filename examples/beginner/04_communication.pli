@@ -1,0 +1,33 @@
+/*
+ * Basic Communication Between Membranes
+ * 
+ * Demonstrates how objects can move between parent and child membranes
+ * 
+ * Concept: Objects can be sent in/out of membranes
+ * Difficulty: Beginner
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def main()
+{
+    // Nested membrane structure
+    @mu = [[  ]'2]'1;
+    
+    // Objects in outer membrane
+    @ms(1) = a{5};
+    
+    // Objects in inner membrane
+    @ms(2) = b{3};
+    
+    // Evolution rules showing communication concepts
+    // Send objects between membranes using proper syntax
+    [a --> x]'1;
+    [b --> y]'2;
+    
+    // Objects can be moved via dissolution or division
+    // (Communication rules need specific model support)
+}

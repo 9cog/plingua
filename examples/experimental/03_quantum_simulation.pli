@@ -1,0 +1,77 @@
+/*
+ * Quantum Computing Simulation
+ * 
+ * Simulates quantum superposition and entanglement using membrane
+ * parallelism. Membranes represent quantum states, rules represent gates.
+ * 
+ * Concept: Quantum-inspired computation, superposition via membranes
+ * Difficulty: Experimental
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def quantumSimulation(numQubits)
+{
+    @mu = [[]'quantum]'system;
+    
+    // Initialize in |0⟩ state for all qubits
+    @ms(quantum) = qubit{0,0}, qubit{1,0}, qubit{2,0},
+                   amplitude{1.0};
+    
+    // Hadamard gate: creates superposition (division)
+    // |0⟩ -> (|0⟩ + |1⟩)/√2
+    [qubit{i,0}, amplitude{a}]'quantum -->
+        [qubit{i,0}, amplitude{a*0.707}]'quantum
+        [qubit{i,1}, amplitude{a*0.707}]'quantum;
+    
+    // Pauli-X gate (NOT): flips qubit
+    [qubit{i,0}]'quantum --> [qubit{i,1}]'quantum;
+    [qubit{i,1}]'quantum --> [qubit{i,0}]'quantum;
+    
+    // CNOT gate: controlled-NOT (entanglement)
+    [qubit{control,1}, qubit{target,0}]'quantum -->
+        [qubit{control,1}, qubit{target,1}]'quantum;
+    
+    [qubit{control,1}, qubit{target,1}]'quantum -->
+        [qubit{control,1}, qubit{target,0}]'quantum;
+    
+    // Measurement: collapse superposition (filter by amplitude)
+    [qubit{i,val}, amplitude{a}]'quantum -->
+        [measured{i,val}]'quantum :: probability(a*a);
+    
+    // Quantum algorithms: Deutsch-Jozsa, Grover's, Shor's
+    // represented as sequences of quantum gates
+}
+
+def deutsch_algorithm()
+{
+    // Determine if function f is constant or balanced
+    // using only one query (quantum speedup)
+    
+    @mu = [[]'q]'s;
+    
+    // Initialize |01⟩
+    @ms(q) = qubit{0,0}, qubit{1,1};
+    
+    // Apply Hadamard to both
+    // State: (|0⟩+|1⟩)(|0⟩-|1⟩)/2
+    
+    // Apply oracle (function evaluation)
+    // Balanced function: phase flip
+    
+    // Apply Hadamard to first qubit
+    
+    // Measure: |0⟩ = constant, |1⟩ = balanced
+}
+
+def main()
+{
+    // Simulate 3-qubit quantum circuit
+    call quantumSimulation(3);
+    
+    // Run Deutsch's algorithm
+    call deutsch_algorithm();
+}

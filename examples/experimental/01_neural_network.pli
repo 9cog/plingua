@@ -1,0 +1,61 @@
+/*
+ * Neural Network Simulation Using P-Systems
+ * 
+ * Simulates a simple feedforward neural network using membrane computing.
+ * Neurons are membranes, signals are objects, weights encoded in rules.
+ * 
+ * Concept: Bio-inspired computation, distributed neural processing
+ * Difficulty: Experimental
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def neuralNetwork(numInputs, numHidden, numOutputs)
+{
+    // Three-layer network: input -> hidden -> output
+    @mu = [
+        [  ]'input
+        [  ]'hidden
+        [  ]'output
+    ]'network;
+    
+    // Input signals (example: binary pattern)
+    @ms(input) = signal{0,1}, signal{1,0}, signal{2,1}, signal{3,1};
+    
+    // Weights as communication rules with multiplicities
+    // Input to hidden connections
+    input_signal{i,val} [  ]'hidden --> 
+        [activation{h,val*weight{i,h}}]'hidden
+        : 0 <= i < numInputs, 0 <= h < numHidden;
+    
+    // Hidden layer activation (simplified sigmoid)
+    [activation{h,sum}]'hidden --> 
+        [fired{h}]'hidden : sum > threshold{h};
+    
+    [activation{h,sum}]'hidden --> 
+        [silent{h}]'hidden : sum <= threshold{h};
+    
+    // Hidden to output connections
+    [fired{h}]'hidden [  ]'output --> 
+        [  ]'hidden [output_signal{o,weight{h,o}}]'output
+        : 0 <= h < numHidden, 0 <= o < numOutputs;
+    
+    // Output layer summation and activation
+    [output_signal{o,val}]'output --> 
+        [result{o,1}]'output : val > output_threshold{o};
+    
+    [output_signal{o,val}]'output --> 
+        [result{o,0}]'output : val <= output_threshold{o};
+    
+    // Network learns by adjusting weights based on error
+    // (Backpropagation would require additional complexity)
+}
+
+def main()
+{
+    // Simple 4-2-2 network (XOR-like problem)
+    call neuralNetwork(4, 2, 2);
+}

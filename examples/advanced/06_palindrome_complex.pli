@@ -1,0 +1,51 @@
+/*
+ * Palindrome Checker (Complex)
+ * 
+ * Checks if a sequence is a palindrome using membrane structure
+ * and bidirectional comparison.
+ * 
+ * Concept: Dual-direction processing with membrane hierarchy
+ * Difficulty: Advanced
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def palindromeCheck(len)
+{
+    @mu = [[  ]'left [  ]'right]'main;
+    
+    // String "RACECAR" represented as indexed chars
+    @ms(main) = char{0,82}, char{1,65}, char{2,67}, char{3,69},
+                char{4,67}, char{5,65}, char{6,82},
+                length{len};
+    
+    // Send first half to left membrane
+    char{i,v}[  ]'left --> [char{i,v}]'left
+        : 0 <= i < len/2;
+    
+    // Send second half to right membrane (reversed indices)
+    char{i,v}[  ]'right --> [char{len-1-i,v}]'right
+        : len/2 <= i < len;
+    
+    // Compare: send matching chars out as 'match'
+    [[char{i,v}]'left]'main --> match{i}[  ]'left;
+    [[char{i,v}]'right]'main --> match{i}[  ]'right;
+    
+    // Collect matches
+    match{i}, match{i} --> verified{i};
+    
+    // If all positions verified, it's a palindrome
+    verified{i} : 0 <= i < len/2 --> [is_palindrome]'main;
+    
+    // Middle character (odd length) is automatically valid
+    @ms(main) += middle_ok : len % 2 == 1;
+}
+
+def main()
+{
+    // Check if "RACECAR" is palindrome (it is)
+    call palindromeCheck(7);
+}

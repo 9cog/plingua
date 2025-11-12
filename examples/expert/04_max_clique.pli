@@ -1,0 +1,57 @@
+/*
+ * Maximum Clique Problem
+ * 
+ * Finds the largest complete subgraph (clique) in a graph.
+ * Every pair of vertices in a clique must be connected.
+ * 
+ * Concept: Generate all subsets, verify clique property, maximize
+ * Difficulty: Expert
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def maxClique(numVertices)
+{
+    @mu = [[]'2]'1;
+    
+    // Start with empty clique candidate
+    @ms(2) = vertex{0}, candidate{0}, size{0};
+    
+    // Define graph as adjacency: adj{v1,v2} means edge exists
+    @ms(2) += adj{0,1}, adj{1,0},
+              adj{0,2}, adj{2,0},
+              adj{1,2}, adj{2,1},
+              adj{1,3}, adj{3,1},
+              adj{2,3}, adj{3,2},
+              adj{2,4}, adj{4,2},
+              adj{3,4}, adj{4,3};
+    
+    // For each vertex: decide to include in clique or not
+    [vertex{v}, candidate{mask}, size{s}]'2 -->
+        [vertex{v+1}, candidate{mask|(1<<v)}, size{s+1}]'2  // Include
+        [vertex{v+1}, candidate{mask}, size{s}]'2           // Exclude
+        : 0 <= v < numVertices;
+    
+    // Verify clique property: all pairs must be connected
+    // For each pair (u,v) in candidate, check if edge exists
+    [candidate{mask}]'2 --> [invalid_clique]'2
+        : exists u,v: 0 <= u < v < numVertices,
+          (mask & (1<<u)) != 0, (mask & (1<<v)) != 0,
+          no_edge(u, v);
+    
+    // Valid cliques marked with their size
+    [vertex{numVertices}, candidate{mask}, size{s}]'2 --> [clique{s}]'2;
+    
+    // Find maximum size
+    [clique{s1}]'2, [clique{s2}]'2 --> [clique{s1}]'2
+        : s1 >= s2;
+}
+
+def main()
+{
+    // Find maximum clique in 5-vertex graph
+    call maxClique(5);
+}

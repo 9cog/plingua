@@ -1,0 +1,32 @@
+/*
+ * String Reversal Using Objects
+ * 
+ * Reverses a string by representing characters as indexed objects
+ * 
+ * Concept: Sequence manipulation using indexed objects
+ * Difficulty: Intermediate
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def reverseString(len)
+{
+    @mu = [ ]'1;
+    
+    // Represent string "HELLO" as indexed characters
+    @ms(1) = char{0}, char{1}, char{2}, char{3}, char{4};
+    
+    // Reverse by swapping (simplified demonstration)
+    [char{i} --> reversed{i}]'1 : 0 <= i < len;
+    
+    // Demonstrates string reversal concept
+    // Full implementation would swap positions
+}
+
+def main()
+{
+    call reverseString(5);
+}

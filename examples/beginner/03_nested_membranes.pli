@@ -1,0 +1,34 @@
+/*
+ * Nested Membranes
+ * 
+ * Demonstrates hierarchical membrane structure - membranes within membranes
+ * 
+ * Concept: Membranes can contain other membranes, creating compartments
+ * Difficulty: Beginner
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def main()
+{
+    // Create nested membrane structure
+    // Membrane '2' is inside membrane '1'
+    @mu = [[  ]'2]'1;
+    
+    // Put objects in the outer membrane
+    @ms(1) = a{3};
+    
+    // Put objects in the inner membrane
+    @ms(2) = b{2};
+    
+    // Rule in outer membrane
+    [a --> x]'1;
+    
+    // Rule in inner membrane
+    [b --> y]'2;
+    
+    // Rules execute independently in each membrane
+}

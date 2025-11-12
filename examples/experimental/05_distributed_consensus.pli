@@ -1,0 +1,86 @@
+/*
+ * Distributed Consensus Algorithm
+ * 
+ * Implements Byzantine fault-tolerant consensus where membranes
+ * represent nodes in a distributed system agreeing on a value.
+ * 
+ * Concept: Distributed algorithms, fault tolerance, agreement protocols
+ * Difficulty: Experimental
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def byzantineConsensus(numNodes, maxFaulty)
+{
+    // Byzantine Generals Problem: reach agreement despite faulty nodes
+    @mu = {[[  ]'node{i}]'network : 0 <= i < numNodes};
+    
+    // Each node has initial value
+    @ms(node{0}) = value{0,1};
+    @ms(node{1}) = value{1,1};
+    @ms(node{2}) = value{2,0};
+    @ms(node{3}) = value{3,1};
+    
+    // Some nodes are Byzantine (faulty)
+    @ms(node{2}) += byzantine;
+    
+    // Round 1: Broadcast values
+    [[value{i,v}]'node{i}]'network --> 
+        [  ]'node{i} {[received{i,v}]'node{j} : 0 <= j < numNodes, j != i};
+    
+    // Byzantine nodes send conflicting values
+    [[value{i,v}, byzantine]'node{i}]'network -->
+        [byzantine]'node{i} {[received{i,random(0,1)}]'node{j} 
+            : 0 <= j < numNodes, j != i};
+    
+    // Round 2: Each node counts votes
+    [received{i,val}]'node{j} --> [vote{val}]'node{j};
+    
+    // Decision: majority vote (if > 2/3 agree)
+    [vote{v}]'node{i} --> [decided{v}]'node{i}
+        : count(vote{v}) > (2*numNodes)/3;
+    
+    // Consensus reached when all honest nodes decide same value
+    [decided{v}]'node{i} : 0 <= i < numNodes, !byzantine{i} --> [consensus{v}];
+    
+    // Tolerates up to f < n/3 Byzantine faults
+}
+
+def raftConsensus(numNodes)
+{
+    // Raft consensus algorithm for distributed log replication
+    @mu = {[[  ]'server{i}]'cluster : 0 <= i < numNodes};
+    
+    // States: follower, candidate, leader
+    @ms(server{i}) = follower, term{0}, log{empty}
+        : 0 <= i < numNodes;
+    
+    // Leader election
+    [follower, timeout]'server{i} --> [candidate, term{t+1}]'server{i};
+    
+    // Request votes
+    [[candidate, term{t}]'server{i}]'cluster -->
+        [candidate, term{t}]'server{i} 
+        {[vote_request{i,t}]'server{j} : 0 <= j < numNodes, j != i};
+    
+    // Grant vote
+    [[vote_request{i,t}, term{t_own}]'server{j}]'cluster -->
+        [term{max(t,t_own)}]'server{j} [vote{i}]'server{i}
+        : t >= t_own;
+    
+    // Become leader if majority votes received
+    [candidate, vote{i}]'server{i} --> [leader]'server{i}
+        : count(vote{i}) > numNodes/2;
+}
+
+def main()
+{
+    // Byzantine consensus with 4 nodes, 1 faulty
+    call byzantineConsensus(4, 1);
+    
+    // Raft consensus with 5 nodes
+    call raftConsensus(5);
+}

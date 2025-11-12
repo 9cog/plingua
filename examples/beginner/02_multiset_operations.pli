@@ -1,0 +1,33 @@
+/*
+ * Multiset Operations
+ * 
+ * Demonstrates basic multiset manipulation - objects with multiplicities
+ * 
+ * Concept: Multiple objects can exist and evolve simultaneously
+ * Difficulty: Beginner
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def main()
+{
+    // Single membrane
+    @mu = [ ]'1;
+    
+    // Initialize with multiple objects
+    @ms(1) = a{3}, b{2}, c;
+    
+    // Rule 1: Each 'a' produces two 'x' objects
+    [a --> x{2}]'1;
+    
+    // Rule 2: Each 'b' transforms to 'y'
+    [b --> y]'1;
+    
+    // Rule 3: 'c' transforms to 'z'
+    [c --> z]'1;
+    
+    // After one step: x{6}, y{2}, z
+}

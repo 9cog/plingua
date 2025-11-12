@@ -1,0 +1,55 @@
+/*
+ * Graph Connectivity Checker
+ * 
+ * Determines if a graph is connected (there exists a path between
+ * any two vertices).
+ * 
+ * Concept: Graph traversal using membrane communication
+ * Difficulty: Advanced
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<transition>
+@include "../transition_model.pli"
+
+def graphConnectivity(n)
+{
+    @mu = [ ]'1;
+    
+    // Mark vertex 0 as reachable
+    @ms(1) = reachable{0}, frontier{0}, step{0};
+    
+    // Define graph edges
+    @ms(1) += edge{0,1}, edge{1,2}, edge{2,3},
+              edge{3,4}, edge{0,2}, edge{1,4};
+    
+    // Explore neighbors of frontier vertices
+    [frontier{v}, edge{v,u}, reachable{mask}]'1 -->
+        [reachable{mask|(1<<u)}, newfrontier{u}, edge{v,u}]'1
+        : 0 <= v < n, 0 <= u < n, (mask & (1<<u)) == 0;
+    
+    // Also check reverse edges
+    [frontier{v}, edge{u,v}, reachable{mask}]'1 -->
+        [reachable{mask|(1<<u)}, newfrontier{u}, edge{u,v}]'1
+        : 0 <= v < n, 0 <= u < n, (mask & (1<<u)) == 0;
+    
+    // Update frontier for next iteration
+    [newfrontier{v}]'1 --> [frontier{v}]'1;
+    
+    // Check if all vertices reachable
+    [reachable{mask}, step{s}]'1 --> [connected]'1
+        : mask == (1<<n)-1;
+    
+    // If frontier empty but not all reached, disconnected
+    [step{s}, reachable{mask}]'1 --> [disconnected]'1
+        : s > n, mask != (1<<n)-1;
+    
+    [step{s}]'1 --> [step{s+1}]'1 : s < n;
+}
+
+def main()
+{
+    // Check connectivity of 5-vertex graph
+    call graphConnectivity(5);
+}

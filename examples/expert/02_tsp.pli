@@ -1,0 +1,51 @@
+/*
+ * Traveling Salesman Problem (TSP)
+ * 
+ * Finds the shortest route visiting all cities exactly once and
+ * returning to the starting city. Classic NP-hard optimization problem.
+ * 
+ * Concept: Generate all permutations, compute costs, find minimum
+ * Difficulty: Expert
+ * 
+ * Copyright (C) 2024 Research Group On Natural Computing
+ */
+
+@model<membrane_division>
+@include "../membrane_division_model.pli"
+
+def tsp(numCities)
+{
+    @mu = [[]'2]'1;
+    
+    // Start tour from city 0
+    @ms(2) = current{0}, visited{1}, step{0}, cost{0};
+    
+    // Distance matrix: dist{from,to,distance}
+    @ms(2) += dist{0,1,10}, dist{0,2,15}, dist{0,3,20},
+              dist{1,0,10}, dist{1,2,35}, dist{1,3,25},
+              dist{2,0,15}, dist{2,1,35}, dist{2,3,30},
+              dist{3,0,20}, dist{3,1,25}, dist{3,2,30};
+    
+    // Non-deterministically choose next unvisited city
+    [current{from}, dist{from,to,d}, visited{mask}, step{s}, cost{c}]'2 -->
+        [current{to}, dist{from,to,d}, visited{mask|(1<<to)}, 
+         step{s+1}, cost{c+d}]'2
+        : 0 <= from < numCities, 0 <= to < numCities,
+          (mask & (1<<to)) == 0, s < numCities-1;
+    
+    // Return to starting city
+    [current{from}, dist{from,0,d}, step{numCities-1}, cost{c}]'2 -->
+        [tour_complete, final_cost{c+d}]'2;
+    
+    // Find minimum among all complete tours
+    [final_cost{c1}]'2, [final_cost{c2}]'2 --> [final_cost{c1}]'2
+        : c1 <= c2;
+    
+    // Remaining membrane has optimal tour
+}
+
+def main()
+{
+    // Solve TSP for 4 cities
+    call tsp(4);
+}
